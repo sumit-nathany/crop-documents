@@ -9,6 +9,7 @@ A high-performance, local command-line utility for macOS to automatically detect
 - 🧠 **ML-Based Detection**: Uses Apple's native on-device **Vision Framework** (`VNDetectDocumentSegmentationRequest`) for high-accuracy quadrilateral segmentations.
 - 🖼️ **Natural Border**: Instead of drawing artificial colored borders, the tool pushes the crop boundary outward from the document's center (by a configurable %). This preserves a sliver of the actual background (table surface, hands, etc.) to look natural.
 - 📐 **Perspective Correction & No Aspect Ratio Limits**: De-skews papers shot at an angle, automatically adjusting the output shape to match the document's true proportions (long receipts, square cards, landscape documents, etc.).
+- 🔄 **Auto-Rotation (opt-in)**: After cropping, uses Tesseract OSD to detect and correct documents that are rotated 90°, 180°, or 270°. Skips gracefully when confidence is low or Tesseract is not installed.
 - 🍏 **Native HEIC/HEIF Support**: Directly handles photos taken with your iPhone, saving them as high-quality JPEGs.
 - 📂 **Auto Folder Watcher**: Background agent monitors a directory and auto-processes incoming pictures.
 - 📄 **Lossless PDF Generation**: Merges crops into custom PDFs, fitting each page exactly to the image's dimensions.
@@ -26,6 +27,12 @@ This tool requires **macOS 13+ (Ventura)** or later and Xcode Command Line Tools
    ./setup.sh
    ```
    *Note: This script compiles the Swift native binary (`detector/detect`) and installs Python dependencies (`opencv-python`, `pillow`, `pillow-heif`, `img2pdf`, `watchdog`, `pyyaml`, `numpy`).*
+
+2. **(Optional) Auto-Rotation** — install Tesseract if you want `--rotate` support:
+   ```bash
+   brew install tesseract
+   pip install pytesseract
+   ```
 
 ---
 
@@ -85,6 +92,23 @@ python3 pdf_builder.py ./cropped_results/ --output ~/Desktop/monthly_report.pdf
 python3 pdf_builder.py file1.jpg file2.png file3.jpg --output ~/Desktop/bundled.pdf
 ```
 
+### 5. Auto-Rotation (`--rotate` / `-r`)
+When a document is photographed rotated (e.g. sideways or upside-down), use `--rotate` to let Tesseract detect and fix the orientation **after** cropping:
+
+```bash
+# Crop + auto-rotate using Tesseract OSD
+python3 batch.py --input ~/Downloads/Receipts/ --rotate
+
+# Combine with PDF export
+python3 batch.py --input ~/Downloads/Bills/ --rotate --pdf bills.pdf
+
+# Adjust OSD confidence threshold (default 1.0; lower = more aggressive)
+python3 batch.py --input ./photos/ --rotate --rotate-confidence 0.5
+```
+
+> **Requires:** `brew install tesseract` and `pip install pytesseract`  
+> If Tesseract is not installed, the step is silently skipped — no crash.
+
 ---
 
 ## Configuration
@@ -100,6 +124,10 @@ output_dir: "./output"
 
 # Output JPEG quality (60-100)
 jpeg_quality: 95
+
+# Auto-rotation via Tesseract OSD (opt-in; requires tesseract + pytesseract)
+auto_rotate: false
+rotate_confidence: 1.0   # 0.0–∞, higher = more conservative
 ```
 
 ---

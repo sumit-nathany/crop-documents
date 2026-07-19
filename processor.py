@@ -6,7 +6,8 @@ For each image:
   2. Convert normalized Vision coords → pixel coords (flipping y-axis).
   3. Expand the detected quad outward by `expansion_pct` from its centroid.
   4. Apply a perspective warp to produce a flat, de-skewed image.
-  5. Save to the output directory with the same filename.
+  5. (Optional) Use Tesseract OSD to detect and correct document rotation.
+  6. Save to the output directory with the same filename.
 """
 
 import json
@@ -20,6 +21,14 @@ from typing import Optional
 import cv2
 import numpy as np
 from PIL import Image
+
+# ── Optional Tesseract OSD for auto-rotation ──────────────────────────────────
+try:
+    import pytesseract
+    from pytesseract import Output as TesseractOutput
+    _TESSERACT_AVAILABLE = True
+except ImportError:
+    _TESSERACT_AVAILABLE = False
 
 # ── HEIC support ──────────────────────────────────────────────────────────────
 # Try pillow-heif first (pip install pillow-heif). If not available, fall back
@@ -131,12 +140,17 @@ def process_image(
     output_dir: Path,
     expansion_pct: float = 4.0,
     skipped_log: Optional[list] = None,
+    auto_rotate: bool = False,
+    rotate_confidence: float = 1.0,
 ) -> bool:
     """
     Full pipeline for a single image.
 
     Returns True on success, False if skipped (no document detected).
     Raises on hard errors (file I/O, detector crash, etc.).
+
+    If `auto_rotate` is True, Tesseract OSD is used after the perspective warp
+    to detect and correct document rotation (requires tesseract to be installed).
     """
     # ── Load image ──────────────────────────────────────────────────────────
     try:
@@ -170,13 +184,17 @@ def process_image(
     # ── Perspective warp ────────────────────────────────────────────────────
     warped = warp_perspective(cv_img, expanded_px)
 
+    # ── Auto-rotate (optional) ──────────────────────────────────────────────
+    # Convert to PIL now so auto_rotate_image and the save logic share one copy.
+    warped_rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
+    out_pil = Image.fromarray(warped_rgb)
+
+    if auto_rotate:
+        out_pil = auto_rotate_image(out_pil, min_confidence=rotate_confidence)
+
     # ── Save output ─────────────────────────────────────────────────────────
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / image_path.name
-
-    # Convert back to PIL to preserve format and quality handling
-    warped_rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
-    out_pil = Image.fromarray(warped_rgb)
 
     ext = image_path.suffix.lower()
     if ext in {".jpg", ".jpeg"}:
@@ -203,6 +221,53 @@ def process_image(
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def auto_rotate_image(img: Image.Image, min_confidence: float = 1.0) -> Image.Image:
+    """
+    Use Tesseract OSD (Orientation and Script Detection) to detect and correct
+    image rotation. The image should ideally be already cropped/de-skewed for
+    best results.
+
+    Returns the (possibly rotated) PIL image unchanged if:
+      - pytesseract is not installed
+      - Tesseract binary is not found
+      - OSD confidence is below `min_confidence`
+      - The detected rotation is 0° (already upright)
+    """
+    if not _TESSERACT_AVAILABLE:
+        print("  ⚠️  pytesseract not installed — skipping auto-rotate. "
+              "Run: pip install pytesseract  (and: brew install tesseract)")
+        return img
+
+    try:
+        osd = pytesseract.image_to_osd(img, output_type=TesseractOutput.DICT)
+        angle = osd.get("rotate", 0)
+        confidence = osd.get("orientation_conf", 0.0)
+
+        if angle == 0:
+            return img
+
+        if confidence < min_confidence:
+            print(
+                f"  ℹ️   OSD detected {angle}° rotation but confidence "
+                f"({confidence:.2f}) is below threshold ({min_confidence:.2f}) — skipping."
+            )
+            return img
+
+        print(f"  🔄  Auto-rotating {angle}° (OSD confidence: {confidence:.2f})")
+        # Tesseract's `rotate` = degrees the image is CCW-offset from upright.
+        # PIL rotate() also goes CCW, so we must negate to *undo* the offset.
+        # (180° is symmetric so it worked before; 90°/270° were wrong.)
+        return img.rotate(-angle, expand=True)
+
+    except pytesseract.TesseractNotFoundError:
+        print("  ⚠️  Tesseract binary not found — skipping auto-rotate. "
+              "Install with: brew install tesseract")
+    except Exception as e:
+        print(f"  ⚠️  OSD failed ({e}) — skipping auto-rotate.")
+
+    return img
+
 
 def _open_image(image_path: Path) -> Image.Image:
     """

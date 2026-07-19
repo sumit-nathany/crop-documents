@@ -67,14 +67,18 @@ def collect_images(input_path: Path) -> list[Path]:
         sys.exit(1)
 
 
-def run_batch(images: list[Path], output_dir: Path, expansion_pct: float) -> None:
+def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
+              auto_rotate: bool = False, rotate_confidence: float = 1.0) -> None:
     total = len(images)
     if total == 0:
         print("⚠️  No supported images found.")
         return
 
     print(f"\n📂  Processing {total} image(s) → {output_dir}/")
-    print(f"🔍  Expansion border: {expansion_pct}%\n")
+    print(f"🔍  Expansion border: {expansion_pct}%")
+    if auto_rotate:
+        print(f"🔄  Auto-rotate: ON (confidence threshold: {rotate_confidence})")
+    print()
 
     skipped_log: list[str] = []
     success = 0
@@ -82,7 +86,9 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float) -> Non
     for i, img_path in enumerate(images, 1):
         print(f"[{i}/{total}] {img_path.name}")
         try:
-            ok = process_image(img_path, output_dir, expansion_pct, skipped_log)
+            ok = process_image(img_path, output_dir, expansion_pct, skipped_log,
+                               auto_rotate=auto_rotate,
+                               rotate_confidence=rotate_confidence)
             if ok:
                 success += 1
         except Exception as e:
@@ -106,7 +112,8 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float) -> Non
 
 # ── Watch mode (Phase 2 placeholder) ─────────────────────────────────────────
 
-def run_watch(input_dir: Path, output_dir: Path, expansion_pct: float) -> None:
+def run_watch(input_dir: Path, output_dir: Path, expansion_pct: float,
+              auto_rotate: bool = False, rotate_confidence: float = 1.0) -> None:
     try:
         from watchdog.events import FileSystemEventHandler
         from watchdog.observers import Observer
@@ -125,7 +132,9 @@ def run_watch(input_dir: Path, output_dir: Path, expansion_pct: float) -> None:
             time.sleep(0.5)
             print(f"\n🆕  New file detected: {p.name}")
             try:
-                process_image(p, output_dir, expansion_pct)
+                process_image(p, output_dir, expansion_pct,
+                              auto_rotate=auto_rotate,
+                              rotate_confidence=rotate_confidence)
             except Exception as e:
                 print(f"  ❌  Error: {e}")
 
@@ -171,6 +180,19 @@ def main():
              "as a percentage (default: 4).",
     )
     parser.add_argument(
+        "--rotate", "-r",
+        action="store_true",
+        default=bool(config.get("auto_rotate", False)),
+        help="Auto-rotate the cropped document using Tesseract OSD "
+             "(requires: pip install pytesseract && brew install tesseract).",
+    )
+    parser.add_argument(
+        "--rotate-confidence",
+        type=float,
+        default=float(config.get("rotate_confidence", 1.0)),
+        help="Minimum OSD confidence required to apply rotation (default: 1.0).",
+    )
+    parser.add_argument(
         "--watch", "-w",
         action="store_true",
         help="Watch mode: monitor the input folder and auto-process new images.",
@@ -198,11 +220,15 @@ def main():
         if not args.input.is_dir():
             print("❌  --watch requires a directory as --input.")
             sys.exit(1)
-        run_watch(args.input, output_dir, args.expansion)
+        run_watch(args.input, output_dir, args.expansion,
+                  auto_rotate=args.rotate,
+                  rotate_confidence=args.rotate_confidence)
     else:
         images = collect_images(args.input)
         # Keep track of generated output paths if we want to combine them into a PDF
-        success = run_batch(images, output_dir, args.expansion)
+        success = run_batch(images, output_dir, args.expansion,
+                            auto_rotate=args.rotate,
+                            rotate_confidence=args.rotate_confidence)
         
         if success and args.pdf:
             # Gather paths of the cropped images that were successfully generated
