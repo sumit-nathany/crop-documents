@@ -69,7 +69,7 @@ def collect_images(input_path: Path) -> list[Path]:
 
 def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
               auto_rotate: bool = False, rotate_confidence: float = 1.0,
-              deskew: bool = False) -> None:
+              deskew: bool = False, refine_corners: bool = False) -> None:
     total = len(images)
     if total == 0:
         print("⚠️  No supported images found.")
@@ -77,6 +77,8 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
 
     print(f"\n📂  Processing {total} image(s) → {output_dir}/")
     print(f"🔍  Expansion border: {expansion_pct}%")
+    if refine_corners:
+        print(f"📐  Refine corners: ON")
     if deskew:
         print(f"📐  Fine deskew: ON")
     if auto_rotate:
@@ -92,7 +94,8 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
             ok = process_image(img_path, output_dir, expansion_pct, skipped_log,
                                auto_rotate=auto_rotate,
                                rotate_confidence=rotate_confidence,
-                               deskew=deskew)
+                               deskew=deskew,
+                               refine_corners_opt=refine_corners)
             if ok:
                 success += 1
         except Exception as e:
@@ -118,7 +121,7 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
 
 def run_watch(input_dir: Path, output_dir: Path, expansion_pct: float,
               auto_rotate: bool = False, rotate_confidence: float = 1.0,
-              deskew: bool = False) -> None:
+              deskew: bool = False, refine_corners: bool = False) -> None:
     try:
         from watchdog.events import FileSystemEventHandler
         from watchdog.observers import Observer
@@ -140,7 +143,8 @@ def run_watch(input_dir: Path, output_dir: Path, expansion_pct: float,
                 process_image(p, output_dir, expansion_pct,
                               auto_rotate=auto_rotate,
                               rotate_confidence=rotate_confidence,
-                              deskew=deskew)
+                              deskew=deskew,
+                              refine_corners_opt=refine_corners)
             except Exception as e:
                 print(f"  ❌  Error: {e}")
 
@@ -206,6 +210,12 @@ def main():
              "residual rotational skew after the perspective warp (no extra deps required).",
     )
     parser.add_argument(
+        "--refine-corners", "-rc",
+        action="store_true",
+        default=bool(config.get("refine_corners", False)),
+        help="Geometrically refine folded or misdetected corners to fix x-axis perspective.",
+    )
+    parser.add_argument(
         "--watch", "-w",
         action="store_true",
         help="Watch mode: monitor the input folder and auto-process new images.",
@@ -236,14 +246,16 @@ def main():
         run_watch(args.input, output_dir, args.expansion,
                   auto_rotate=args.rotate,
                   rotate_confidence=args.rotate_confidence,
-                  deskew=args.deskew)
+                  deskew=args.deskew,
+                  refine_corners=args.refine_corners)
     else:
         images = collect_images(args.input)
         # Keep track of generated output paths if we want to combine them into a PDF
         success = run_batch(images, output_dir, args.expansion,
                             auto_rotate=args.rotate,
                             rotate_confidence=args.rotate_confidence,
-                            deskew=args.deskew)
+                            deskew=args.deskew,
+                            refine_corners=args.refine_corners)
         
         if success and args.pdf:
             # Gather paths of the cropped images that were successfully generated

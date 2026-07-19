@@ -13,6 +13,7 @@ For each image:
 """
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -92,6 +93,55 @@ def normalized_to_pixels(corners: list[dict], img_w: int, img_h: int) -> np.ndar
     return np.array(pts, dtype=np.float32)
 
 
+def refine_corners(pts: np.ndarray, img_h: int) -> np.ndarray:
+    """
+    Detects and repairs a folded corner by forcing the top/bottom edges to be
+    roughly parallel if they diverge significantly.
+    pts: [TL, TR, BR, BL] (shape (4, 2))
+    """
+    tl, tr, br, bl = pts.copy()
+    
+    def angle(p1, p2):
+        return np.degrees(np.arctan2(p2[1] - p1[1], p2[0] - p1[0]))
+        
+    def intersect(p1, p2, p3, p4):
+        x1, y1 = p1; x2, y2 = p2
+        x3, y3 = p3; x4, y4 = p4
+        denom = (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4)
+        if abs(denom) < 1e-5:
+            return None
+        px = ((x1*y2 - y1*x2)*(x3-x4) - (x1-x2)*(x3*y4 - y3*x4)) / denom
+        py = ((x1*y2 - y1*x2)*(y3-y4) - (y1-y2)*(x3*y4 - y3*x4)) / denom
+        return np.array([px, py], dtype=np.float32)
+
+    top_ang = angle(tl, tr)
+    bot_ang = angle(bl, br)
+    
+    diff = abs(top_ang - bot_ang) % 360
+    if diff > 180:
+        diff = 360 - diff
+    
+    if diff > 4.0:
+        if tl[1] > tr[1] + img_h * 0.03:
+            tr_virtual = tr + (bl - br)
+            new_tl = intersect(bl, tl, tr, tr_virtual)
+            if new_tl is not None: tl = new_tl
+        elif tr[1] > tl[1] + img_h * 0.03:
+            tl_virtual = tl + (br - bl)
+            new_tr = intersect(br, tr, tl, tl_virtual)
+            if new_tr is not None: tr = new_tr
+        elif bl[1] < br[1] - img_h * 0.03:
+            br_virtual = br + (tl - tr)
+            new_bl = intersect(tl, bl, br, br_virtual)
+            if new_bl is not None: bl = new_bl
+        elif br[1] < bl[1] - img_h * 0.03:
+            bl_virtual = bl + (tr - tl)
+            new_br = intersect(tr, br, bl, bl_virtual)
+            if new_br is not None: br = new_br
+            
+    return np.array([tl, tr, br, bl], dtype=np.float32)
+
+
 def expand_quad(pts: np.ndarray, expansion_pct: float) -> np.ndarray:
     """
     Push each corner outward from the centroid by `expansion_pct` percent.
@@ -146,6 +196,7 @@ def process_image(
     rotate_confidence: float = 1.0,
     deskew: bool = False,
     deskew_max_angle: float = 15.0,
+    refine_corners_opt: bool = False,
 ) -> bool:
     """
     Full pipeline for a single image.
@@ -183,6 +234,10 @@ def process_image(
 
     # ── Convert + expand ────────────────────────────────────────────────────
     corners_px = normalized_to_pixels(detection["corners"], img_w, img_h)
+    
+    if refine_corners_opt:
+        corners_px = refine_corners(corners_px, img_h)
+        
     expanded_px = expand_quad(corners_px, expansion_pct)
 
     # Clamp to image bounds to avoid black strips from warpPerspective
@@ -286,10 +341,26 @@ def deskew_image(img: Image.Image, max_angle: float = 15.0) -> Image.Image:
         return img
 
     print(f"  📐  Deskewing {skew:+.2f}°")
-    # PIL rotate() is CCW-positive.  arctan2 in image coords (y-down) gives a
-    # positive angle for lines that slope downward to the right — i.e., the
-    # document is tilted clockwise.  Rotating CCW by that same angle corrects it.
-    return img.rotate(skew, expand=True, resample=Image.BICUBIC)
+    # PIL rotate() is CCW-positive.
+    rotated = img.rotate(skew, expand=True, resample=Image.BICUBIC)
+    
+    # Cropping the rotated image to the largest inscribed rectangle of the
+    # same aspect ratio to remove the black corners introduced by expand=True.
+    rad = math.radians(abs(skew))
+    cos_a = math.cos(rad)
+    sin_a = math.sin(rad)
+    
+    S = 1.0 / (cos_a + max(w / h, h / w) * sin_a)
+    w_crop = w * S
+    h_crop = h * S
+    
+    W, H = rotated.size
+    left = (W - w_crop) / 2
+    top = (H - h_crop) / 2
+    right = (W + w_crop) / 2
+    bottom = (H + h_crop) / 2
+    
+    return rotated.crop((left, top, right, bottom))
 
 
 def auto_rotate_image(img: Image.Image, min_confidence: float = 1.0) -> Image.Image:
