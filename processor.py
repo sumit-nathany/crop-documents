@@ -341,10 +341,19 @@ def deskew_image(img: Image.Image, max_angle: float = 15.0) -> Image.Image:
         return img
 
     print(f"  📐  Deskewing {skew:+.2f}°")
-    # PIL rotate() is CCW-positive.
-    # We use expand=True to avoid cutting off corners, and fillcolor=(255,255,255)
-    # so the new cosmetic corners introduced by rotation are white instead of black.
-    return img.rotate(skew, expand=True, resample=Image.BICUBIC, fillcolor=(255, 255, 255))
+    
+    cv_img = np.array(img)
+    h, w = cv_img.shape[:2]
+    
+    # PIL rotate CCW is equivalent to OpenCV warpAffine with a positive angle.
+    M = cv2.getRotationMatrix2D((w / 2, h / 2), skew, 1.0)
+    
+    # Rotate the image keeping its original size (expand=False). The empty corner 
+    # triangles introduced by the rotation are seamlessly filled by reflecting the 
+    # edge pixels (which are the 4% table background padding).
+    rotated_cv = cv2.warpAffine(cv_img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
+    
+    return Image.fromarray(rotated_cv)
 
 
 def auto_rotate_image(img: Image.Image, min_confidence: float = 1.0) -> Image.Image:
