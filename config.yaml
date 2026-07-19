@@ -4,14 +4,6 @@
 # Increase this if you want more context visible. Range: 0–15 (recommended: 2–6)
 expansion_pct: 4.0
 
-# ── Boundary snapping ─────────────────────────────────────────────────────────
-# If a detected corner is more than this many percent of the image dimension
-# away from the nearest image edge, snap it toward that edge. This fixes cases
-# where a folded/curled page misleads the Vision detector into missing the true
-# document boundary (e.g. top of document gets clipped).
-# Set to 0 to disable. Range: 0–20 (recommended: 6–10)
-boundary_snap_pct: 8.0
-
 # ── Output settings ───────────────────────────────────────────────────────────
 # Default output directory when --output is not specified on the CLI
 output_dir: "./output"
