@@ -4,10 +4,13 @@ processor.py — Core image processing module.
 For each image:
   1. Call the Swift Vision detector to get document corner coordinates (JSON).
   2. Convert normalized Vision coords → pixel coords (flipping y-axis).
-  3. Expand the detected quad outward by `expansion_pct` from its centroid.
-  4. Apply a perspective warp to produce a flat, de-skewed image.
-  5. (Optional) Use Tesseract OSD to detect and correct document rotation.
-  6. Save to the output directory with the same filename.
+  3. Re-order the 4 corners robustly to TL/TR/BR/BL order.
+  4. Snap corners that are suspiciously far from an image edge toward that edge
+     (fixes folded/curled pages that cause Vision to miss the true document boundary).
+  5. Expand the detected quad outward by `expansion_pct` from its centroid.
+  6. Apply a perspective warp to produce a flat, de-skewed image.
+  7. (Optional) Use Tesseract OSD to detect and correct document rotation.
+  8. Save to the output directory with the same filename.
 """
 
 import json
@@ -79,8 +82,8 @@ def normalized_to_pixels(corners: list[dict], img_w: int, img_h: int) -> np.ndar
     Convert Vision's normalized coords (origin bottom-left) to pixel coords
     (origin top-left, as used by OpenCV/PIL).
 
-    Vision corner order: [topLeft, topRight, bottomRight, bottomLeft] (clockwise).
-    Returns shape (4, 2) float32 array in the same clockwise order.
+    Returns shape (4, 2) float32 array (order not guaranteed — call
+    reorder_corners() afterwards for a stable TL/TR/BR/BL ordering).
     """
     pts = []
     for c in corners:
@@ -88,6 +91,88 @@ def normalized_to_pixels(corners: list[dict], img_w: int, img_h: int) -> np.ndar
         py = (1.0 - c["y"]) * img_h  # flip y-axis
         pts.append([px, py])
     return np.array(pts, dtype=np.float32)
+
+
+def reorder_corners(pts: np.ndarray) -> np.ndarray:
+    """
+    Re-order 4 corner points into a stable [TL, TR, BR, BL] clockwise order,
+    regardless of the order Vision returned them in.
+
+    Uses the classic sum/difference trick:
+      - TL has the smallest (x + y)   (closest to top-left origin)
+      - BR has the largest  (x + y)   (farthest from top-left origin)
+      - TR has the smallest (y - x)   (large x, small y)
+      - BL has the largest  (y - x)   (small x, large y)
+    """
+    s = pts.sum(axis=1)          # x + y per point
+    d = pts[:, 1] - pts[:, 0]   # y - x per point
+    tl = pts[np.argmin(s)]
+    br = pts[np.argmax(s)]
+    tr = pts[np.argmin(d)]
+    bl = pts[np.argmax(d)]
+    return np.array([tl, tr, br, bl], dtype=np.float32)
+
+
+def snap_corners_to_boundary(
+    pts: np.ndarray,
+    img_w: int,
+    img_h: int,
+    snap_pct: float = 8.0,
+) -> np.ndarray:
+    """
+    For each side of the quad, if the corners on that side are suspiciously far
+    from the corresponding image boundary, extend them toward that boundary.
+
+    This corrects cases where a folded/curled page or another object partially
+    obscures a document corner, causing the Vision detector to place the detected
+    boundary well inside the image instead of near the edge.
+
+    `snap_pct` is the threshold: if a corner is more than `snap_pct`% of the
+    image dimension away from the nearest edge it *should* be close to, snap it
+    toward that edge (to a margin of 1% of the image dimension).
+
+    pts must be in [TL, TR, BR, BL] order (call reorder_corners first).
+    """
+    if snap_pct <= 0:
+        return pts
+
+    pts = pts.copy()
+    tl, tr, br, bl = pts
+
+    snap_margin_x = img_w * 0.01
+    snap_margin_y = img_h * 0.01
+    thresh_x = img_w * snap_pct / 100.0
+    thresh_y = img_h * snap_pct / 100.0
+
+    # ── Top edge: TL and TR should be near y=0 ──────────────────────────────
+    top_y = min(tl[1], tr[1])
+    if top_y > thresh_y:
+        offset = top_y - snap_margin_y
+        tl[1] = max(0.0, tl[1] - offset)
+        tr[1] = max(0.0, tr[1] - offset)
+
+    # ── Bottom edge: BL and BR should be near y=img_h ───────────────────────
+    bot_y = max(bl[1], br[1])
+    if (img_h - bot_y) > thresh_y:
+        offset = (img_h - bot_y) - snap_margin_y
+        bl[1] = min(float(img_h - 1), bl[1] + offset)
+        br[1] = min(float(img_h - 1), br[1] + offset)
+
+    # ── Left edge: TL and BL should be near x=0 ─────────────────────────────
+    left_x = min(tl[0], bl[0])
+    if left_x > thresh_x:
+        offset = left_x - snap_margin_x
+        tl[0] = max(0.0, tl[0] - offset)
+        bl[0] = max(0.0, bl[0] - offset)
+
+    # ── Right edge: TR and BR should be near x=img_w ────────────────────────
+    right_x = max(tr[0], br[0])
+    if (img_w - right_x) > thresh_x:
+        offset = (img_w - right_x) - snap_margin_x
+        tr[0] = min(float(img_w - 1), tr[0] + offset)
+        br[0] = min(float(img_w - 1), br[0] + offset)
+
+    return np.array([tl, tr, br, bl], dtype=np.float32)
 
 
 def expand_quad(pts: np.ndarray, expansion_pct: float) -> np.ndarray:
@@ -142,6 +227,7 @@ def process_image(
     skipped_log: Optional[list] = None,
     auto_rotate: bool = False,
     rotate_confidence: float = 1.0,
+    boundary_snap_pct: float = 8.0,
 ) -> bool:
     """
     Full pipeline for a single image.
@@ -151,6 +237,9 @@ def process_image(
 
     If `auto_rotate` is True, Tesseract OSD is used after the perspective warp
     to detect and correct document rotation (requires tesseract to be installed).
+
+    `boundary_snap_pct` controls the boundary-snapping threshold (see
+    snap_corners_to_boundary). Set to 0 to disable.
     """
     # ── Load image ──────────────────────────────────────────────────────────
     try:
@@ -173,8 +262,12 @@ def process_image(
             skipped_log.append(f"{image_path.name}: {reason}")
         return False
 
-    # ── Convert + expand ────────────────────────────────────────────────────
+    # ── Convert → reorder → snap → expand ──────────────────────────────────
     corners_px = normalized_to_pixels(detection["corners"], img_w, img_h)
+    corners_px = reorder_corners(corners_px)
+    corners_px = snap_corners_to_boundary(
+        corners_px, img_w, img_h, snap_pct=boundary_snap_pct
+    )
     expanded_px = expand_quad(corners_px, expansion_pct)
 
     # Clamp to image bounds to avoid black strips from warpPerspective

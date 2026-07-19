@@ -68,7 +68,8 @@ def collect_images(input_path: Path) -> list[Path]:
 
 
 def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
-              auto_rotate: bool = False, rotate_confidence: float = 1.0) -> None:
+              auto_rotate: bool = False, rotate_confidence: float = 1.0,
+              boundary_snap_pct: float = 8.0) -> None:
     total = len(images)
     if total == 0:
         print("⚠️  No supported images found.")
@@ -76,6 +77,8 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
 
     print(f"\n📂  Processing {total} image(s) → {output_dir}/")
     print(f"🔍  Expansion border: {expansion_pct}%")
+    if boundary_snap_pct > 0:
+        print(f"📌  Boundary snap: {boundary_snap_pct}%")
     if auto_rotate:
         print(f"🔄  Auto-rotate: ON (confidence threshold: {rotate_confidence})")
     print()
@@ -88,7 +91,8 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
         try:
             ok = process_image(img_path, output_dir, expansion_pct, skipped_log,
                                auto_rotate=auto_rotate,
-                               rotate_confidence=rotate_confidence)
+                               rotate_confidence=rotate_confidence,
+                               boundary_snap_pct=boundary_snap_pct)
             if ok:
                 success += 1
         except Exception as e:
@@ -113,7 +117,8 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
 # ── Watch mode (Phase 2 placeholder) ─────────────────────────────────────────
 
 def run_watch(input_dir: Path, output_dir: Path, expansion_pct: float,
-              auto_rotate: bool = False, rotate_confidence: float = 1.0) -> None:
+              auto_rotate: bool = False, rotate_confidence: float = 1.0,
+              boundary_snap_pct: float = 8.0) -> None:
     try:
         from watchdog.events import FileSystemEventHandler
         from watchdog.observers import Observer
@@ -134,7 +139,8 @@ def run_watch(input_dir: Path, output_dir: Path, expansion_pct: float,
             try:
                 process_image(p, output_dir, expansion_pct,
                               auto_rotate=auto_rotate,
-                              rotate_confidence=rotate_confidence)
+                              rotate_confidence=rotate_confidence,
+                              boundary_snap_pct=boundary_snap_pct)
             except Exception as e:
                 print(f"  ❌  Error: {e}")
 
@@ -193,6 +199,15 @@ def main():
         help="Minimum OSD confidence required to apply rotation (default: 1.0).",
     )
     parser.add_argument(
+        "--boundary-snap",
+        type=float,
+        default=float(config.get("boundary_snap_pct", 8.0)),
+        help="If a detected corner is more than this many percent of the image "
+             "dimension from the nearest edge, snap it to the edge. "
+             "Fixes folded/curled pages that cause corner clipping. "
+             "Set to 0 to disable (default: 8).",
+    )
+    parser.add_argument(
         "--watch", "-w",
         action="store_true",
         help="Watch mode: monitor the input folder and auto-process new images.",
@@ -222,13 +237,15 @@ def main():
             sys.exit(1)
         run_watch(args.input, output_dir, args.expansion,
                   auto_rotate=args.rotate,
-                  rotate_confidence=args.rotate_confidence)
+                  rotate_confidence=args.rotate_confidence,
+                  boundary_snap_pct=args.boundary_snap)
     else:
         images = collect_images(args.input)
         # Keep track of generated output paths if we want to combine them into a PDF
         success = run_batch(images, output_dir, args.expansion,
                             auto_rotate=args.rotate,
-                            rotate_confidence=args.rotate_confidence)
+                            rotate_confidence=args.rotate_confidence,
+                            boundary_snap_pct=args.boundary_snap)
         
         if success and args.pdf:
             # Gather paths of the cropped images that were successfully generated
