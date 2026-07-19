@@ -1,0 +1,7 @@
+opencv-python
+pillow
+pillow-heif
+img2pdf
+watchdog
+pyyaml
+numpy

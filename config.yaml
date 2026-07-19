@@ -1,0 +1,24 @@
+# ── Crop / border settings ────────────────────────────────────────────────────
+# How far to expand the detected document edges outward, as a percentage
+# of the quad size. This gives a natural sliver of background around the doc.
+# Increase this if you want more context visible. Range: 0–15 (recommended: 2–6)
+expansion_pct: 4.0
+
+# ── Output settings ───────────────────────────────────────────────────────────
+# Default output directory when --output is not specified on the CLI
+output_dir: "./output"
+
+# ── JPEG quality ─────────────────────────────────────────────────────────────
+# Only applies to JPEG output. 95 is near-lossless. Range: 60–100.
+jpeg_quality: 95
+
+# ── Supported input formats ───────────────────────────────────────────────────
+# These are detected by file extension. HEIC is supported via Pillow on macOS.
+supported_extensions:
+  - .jpg
+  - .jpeg
+  - .png
+  - .tiff
+  - .tif
+  - .heic
+  - .heif
