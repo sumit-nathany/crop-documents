@@ -342,25 +342,9 @@ def deskew_image(img: Image.Image, max_angle: float = 15.0) -> Image.Image:
 
     print(f"  📐  Deskewing {skew:+.2f}°")
     # PIL rotate() is CCW-positive.
-    rotated = img.rotate(skew, expand=True, resample=Image.BICUBIC)
-    
-    # Cropping the rotated image to the largest inscribed rectangle of the
-    # same aspect ratio to remove the black corners introduced by expand=True.
-    rad = math.radians(abs(skew))
-    cos_a = math.cos(rad)
-    sin_a = math.sin(rad)
-    
-    S = 1.0 / (cos_a + max(w / h, h / w) * sin_a)
-    w_crop = w * S
-    h_crop = h * S
-    
-    W, H = rotated.size
-    left = (W - w_crop) / 2
-    top = (H - h_crop) / 2
-    right = (W + w_crop) / 2
-    bottom = (H + h_crop) / 2
-    
-    return rotated.crop((left, top, right, bottom))
+    # We use expand=True to avoid cutting off corners, and fillcolor=(255,255,255)
+    # so the new cosmetic corners introduced by rotation are white instead of black.
+    return img.rotate(skew, expand=True, resample=Image.BICUBIC, fillcolor=(255, 255, 255))
 
 
 def auto_rotate_image(img: Image.Image, min_confidence: float = 1.0) -> Image.Image:
