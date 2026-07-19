@@ -31,3 +31,12 @@ auto_rotate: false
 # Minimum OSD orientation confidence to apply rotation (higher = more conservative).
 # Range: 0.0 – ∞  |  Recommended: 1.0
 rotate_confidence: 1.0
+
+# ── Alignment and Deskew ──────────────────────────────────────────────────────
+# Fine Deskew: Detects horizontal text lines and corrects micro-rotations (e.g. 1-2 degrees).
+# Empty corners introduced by deskewing are seamlessly filled using background reflection.
+deskew: false
+
+# Geometric Corner Refinement: Corrects non-parallel top/bottom edges (keystone distortion) 
+# caused by the camera not being perfectly centered over the document.
+refine_corners: false

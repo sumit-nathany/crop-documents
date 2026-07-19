@@ -92,7 +92,23 @@ python3 pdf_builder.py ./cropped_results/ --output ~/Desktop/monthly_report.pdf
 python3 pdf_builder.py file1.jpg file2.png file3.jpg --output ~/Desktop/bundled.pdf
 ```
 
-### 5. Auto-Rotation (`--rotate` / `-r`)
+### 5. Alignment and Micro-Deskew (`--deskew`, `--refine-corners`)
+Documents photographed at awkward angles may suffer from keystone distortion or slight rotational tilt, even after being cropped. You can correct these geometrically:
+
+```bash
+# Correct keystone distortion (non-parallel top/bottom edges)
+python3 batch.py --input ~/Downloads/Receipts/ --refine-corners
+
+# Fine-tune micro-rotation (deskew text lines horizontally)
+python3 batch.py --input ~/Downloads/Receipts/ --deskew
+
+# Apply both alignment fixes simultaneously
+python3 batch.py --input ~/Downloads/Receipts/ --deskew --refine-corners
+```
+
+> **Note:** The `--deskew` flag seamlessly fills any empty corner triangles introduced by the rotation by mirroring the document's natural background padding, ensuring no text is cut off.
+
+### 6. Auto-Rotation (`--rotate` / `-r`)
 When a document is photographed rotated (e.g. sideways or upside-down), use `--rotate` to let Tesseract detect and fix the orientation **after** cropping:
 
 ```bash
