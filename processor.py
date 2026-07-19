@@ -6,8 +6,10 @@ For each image:
   2. Convert normalized Vision coords → pixel coords (flipping y-axis).
   3. Expand the detected quad outward by `expansion_pct` from its centroid.
   4. Apply a perspective warp to produce a flat, de-skewed image.
-  5. (Optional) Use Tesseract OSD to detect and correct document rotation.
-  6. Save to the output directory with the same filename.
+  5. (Optional) Fine-deskew: use Hough line detection to correct residual
+     rotational skew left after the perspective warp.
+  6. (Optional) Use Tesseract OSD to detect and correct document rotation.
+  7. Save to the output directory with the same filename.
 """
 
 import json
@@ -142,6 +144,8 @@ def process_image(
     skipped_log: Optional[list] = None,
     auto_rotate: bool = False,
     rotate_confidence: float = 1.0,
+    deskew: bool = False,
+    deskew_max_angle: float = 15.0,
 ) -> bool:
     """
     Full pipeline for a single image.
@@ -149,8 +153,12 @@ def process_image(
     Returns True on success, False if skipped (no document detected).
     Raises on hard errors (file I/O, detector crash, etc.).
 
-    If `auto_rotate` is True, Tesseract OSD is used after the perspective warp
-    to detect and correct document rotation (requires tesseract to be installed).
+    If `deskew` is True, Hough line detection is used after the perspective
+    warp to detect and correct residual rotational skew (angles within
+    ±`deskew_max_angle` degrees).  This is fast and requires no extra deps.
+
+    If `auto_rotate` is True, Tesseract OSD is used after deskew to detect
+    and correct 90°/180°/270° orientation errors (requires tesseract).
     """
     # ── Load image ──────────────────────────────────────────────────────────
     try:
@@ -184,11 +192,15 @@ def process_image(
     # ── Perspective warp ────────────────────────────────────────────────────
     warped = warp_perspective(cv_img, expanded_px)
 
-    # ── Auto-rotate (optional) ──────────────────────────────────────────────
-    # Convert to PIL now so auto_rotate_image and the save logic share one copy.
+    # ── Convert to PIL for post-processing ─────────────────────────────────
     warped_rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
     out_pil = Image.fromarray(warped_rgb)
 
+    # ── Fine deskew (optional) ───────────────────────────────────────────────
+    if deskew:
+        out_pil = deskew_image(out_pil, max_angle=deskew_max_angle)
+
+    # ── Auto-rotate (optional) ──────────────────────────────────────────────
     if auto_rotate:
         out_pil = auto_rotate_image(out_pil, min_confidence=rotate_confidence)
 
@@ -221,6 +233,64 @@ def process_image(
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def deskew_image(img: Image.Image, max_angle: float = 15.0) -> Image.Image:
+    """
+    Detect and correct small rotational skew in a document image using
+    Hough line detection on horizontal text/rule lines.
+
+    Algorithm:
+      1. Convert to grayscale and apply Gaussian blur.
+      2. Canny edge detection.
+      3. HoughLinesP to find line segments longer than 15% of image width.
+      4. Keep only roughly-horizontal lines (|angle| <= max_angle).
+      5. Compute the length-weighted mean angle.
+      6. If |angle| > 0.3°, rotate by that angle to flatten the document.
+
+    Returns the image unchanged if no reliable skew angle is found.
+    """
+    gray = np.array(img.convert("L"))
+    h, w = gray.shape
+
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 50, 150, apertureSize=3)
+
+    lines = cv2.HoughLinesP(
+        edges,
+        rho=1,
+        theta=np.pi / 180,
+        threshold=80,
+        minLineLength=int(w * 0.15),
+        maxLineGap=25,
+    )
+
+    if lines is None:
+        return img
+
+    angles: list[float] = []
+    weights: list[float] = []
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+        if abs(angle) <= max_angle:
+            length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+            angles.append(angle)
+            weights.append(length)
+
+    if not angles:
+        return img
+
+    skew = float(np.average(angles, weights=weights))
+
+    if abs(skew) < 0.3:  # sub-0.3° — not worth touching
+        return img
+
+    print(f"  📐  Deskewing {skew:+.2f}°")
+    # PIL rotate() is CCW-positive.  arctan2 in image coords (y-down) gives a
+    # positive angle for lines that slope downward to the right — i.e., the
+    # document is tilted clockwise.  Rotating CCW by that same angle corrects it.
+    return img.rotate(skew, expand=True, resample=Image.BICUBIC)
+
 
 def auto_rotate_image(img: Image.Image, min_confidence: float = 1.0) -> Image.Image:
     """
