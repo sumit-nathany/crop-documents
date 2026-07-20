@@ -4,6 +4,9 @@
 # Increase this if you want more context visible. Range: 0–15 (recommended: 2–6)
 expansion_pct: 4.0
 
+# When `--deskew` is on, the pipeline adds +4 to expansion_pct for the initial
+# warp and final organic margin (default 4 → 8) so flap trim doesn't snug to ink.
+
 # ── Output settings ───────────────────────────────────────────────────────────
 # Default output directory when --output is not specified on the CLI
 output_dir: "./output"
@@ -23,20 +26,16 @@ supported_extensions:
   - .heic
   - .heif
 
-# ── Auto-rotation settings ────────────────────────────────────────────────────
-# Use Tesseract OSD to auto-detect and correct document orientation after cropping.
-# Opt-in: set to true to enable, or pass --rotate on the CLI.
+# ── Alignment (`--deskew`) ────────────────────────────────────────────────────
+# Conservative align stack: keystone refine, wider border (+4), micro-rotation,
+# top/bottom flap trim only. Vision re-square / color-flap trim are OFF by
+# default (they routinely destroy good crops). Opt-in; recommended for handheld.
+deskew: false
+
+# ── Auto-rotation (`--rotate`) ────────────────────────────────────────────────
+# Fix 90°/180°/270° orientation via Tesseract OSD after crop/align.
 # Requires: brew install tesseract  &&  pip install pytesseract
 auto_rotate: false
 # Minimum OSD orientation confidence to apply rotation (higher = more conservative).
 # Range: 0.0 – ∞  |  Recommended: 1.0
 rotate_confidence: 1.0
-
-# ── Alignment and Deskew ──────────────────────────────────────────────────────
-# Fine Deskew: Detects horizontal text lines and corrects micro-rotations (e.g. 1-2 degrees).
-# Empty corners introduced by deskewing are seamlessly filled using background reflection.
-deskew: false
-
-# Geometric Corner Refinement: Corrects non-parallel top/bottom edges (keystone distortion) 
-# caused by the camera not being perfectly centered over the document.
-refine_corners: false

@@ -8,20 +8,11 @@ Usage:
   Specific folder:
     python3 batch.py --input ./photos/
 
-  Single image:
-    python3 batch.py --input photo.jpg
+  Align (deskew / keystone / flap trim):
+    python3 batch.py --input ./photos/ --deskew
 
-  Custom output folder:
-    python3 batch.py --input ./photos/ --output ./cropped/
-
-  Custom expansion border (default 4%):
-    python3 batch.py --input ./photos/ --expansion 6
-
-  Watch mode (Phase 2):
-    python3 batch.py --input ./inbox/ --watch
-
-  Batch crop AND combine into a PDF (Phase 3):
-    python3 batch.py --input ./photos/ --pdf combined.pdf
+  Align + fix 90° orientation:
+    python3 batch.py --input ./photos/ --deskew --rotate
 """
 
 import argparse
@@ -31,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from processor import SUPPORTED_EXTENSIONS, process_image
+from processor import DESKEW_BORDER_EXTRA_PCT, SUPPORTED_EXTENSIONS, process_image
 from pdf_builder import build_pdf
 
 
@@ -69,7 +60,7 @@ def collect_images(input_path: Path) -> list[Path]:
 
 def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
               auto_rotate: bool = False, rotate_confidence: float = 1.0,
-              deskew: bool = False, refine_corners: bool = False) -> None:
+              deskew: bool = False) -> None:
     total = len(images)
     if total == 0:
         print("⚠️  No supported images found.")
@@ -77,10 +68,12 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
 
     print(f"\n📂  Processing {total} image(s) → {output_dir}/")
     print(f"🔍  Expansion border: {expansion_pct}%")
-    if refine_corners:
-        print(f"📐  Refine corners: ON")
     if deskew:
-        print(f"📐  Fine deskew: ON")
+        deskew_border = expansion_pct + DESKEW_BORDER_EXTRA_PCT
+        print(
+            f"📐  Align (deskew): ON "
+            f"(border {deskew_border:g}% — +{DESKEW_BORDER_EXTRA_PCT:g} for trim headroom)"
+        )
     if auto_rotate:
         print(f"🔄  Auto-rotate: ON (confidence threshold: {rotate_confidence})")
     print()
@@ -94,8 +87,7 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
             ok = process_image(img_path, output_dir, expansion_pct, skipped_log,
                                auto_rotate=auto_rotate,
                                rotate_confidence=rotate_confidence,
-                               deskew=deskew,
-                               refine_corners_opt=refine_corners)
+                               deskew=deskew)
             if ok:
                 success += 1
         except Exception as e:
@@ -121,7 +113,7 @@ def run_batch(images: list[Path], output_dir: Path, expansion_pct: float,
 
 def run_watch(input_dir: Path, output_dir: Path, expansion_pct: float,
               auto_rotate: bool = False, rotate_confidence: float = 1.0,
-              deskew: bool = False, refine_corners: bool = False) -> None:
+              deskew: bool = False) -> None:
     try:
         from watchdog.events import FileSystemEventHandler
         from watchdog.observers import Observer
@@ -143,8 +135,7 @@ def run_watch(input_dir: Path, output_dir: Path, expansion_pct: float,
                 process_image(p, output_dir, expansion_pct,
                               auto_rotate=auto_rotate,
                               rotate_confidence=rotate_confidence,
-                              deskew=deskew,
-                              refine_corners_opt=refine_corners)
+                              deskew=deskew)
             except Exception as e:
                 print(f"  ❌  Error: {e}")
 
@@ -190,10 +181,17 @@ def main():
              "as a percentage (default: 4).",
     )
     parser.add_argument(
+        "--deskew", "-d",
+        action="store_true",
+        default=bool(config.get("deskew", False)),
+        help="Align the crop: fix keystone, micro-rotation, and trim open "
+             "flaps (top/bottom). Recommended for handheld photos.",
+    )
+    parser.add_argument(
         "--rotate", "-r",
         action="store_true",
         default=bool(config.get("auto_rotate", False)),
-        help="Auto-rotate the cropped document using Tesseract OSD "
+        help="Fix 90°/180°/270° orientation via Tesseract OSD "
              "(requires: pip install pytesseract && brew install tesseract).",
     )
     parser.add_argument(
@@ -201,19 +199,6 @@ def main():
         type=float,
         default=float(config.get("rotate_confidence", 1.0)),
         help="Minimum OSD confidence required to apply rotation (default: 1.0).",
-    )
-    parser.add_argument(
-        "--deskew", "-d",
-        action="store_true",
-        default=bool(config.get("deskew", False)),
-        help="Fine-deskew the cropped document using Hough line detection to correct "
-             "residual rotational skew after the perspective warp (no extra deps required).",
-    )
-    parser.add_argument(
-        "--refine-corners", "-rc",
-        action="store_true",
-        default=bool(config.get("refine_corners", False)),
-        help="Geometrically refine folded or misdetected corners to fix x-axis perspective.",
     )
     parser.add_argument(
         "--watch", "-w",
@@ -246,16 +231,14 @@ def main():
         run_watch(args.input, output_dir, args.expansion,
                   auto_rotate=args.rotate,
                   rotate_confidence=args.rotate_confidence,
-                  deskew=args.deskew,
-                  refine_corners=args.refine_corners)
+                  deskew=args.deskew)
     else:
         images = collect_images(args.input)
         # Keep track of generated output paths if we want to combine them into a PDF
         success = run_batch(images, output_dir, args.expansion,
                             auto_rotate=args.rotate,
                             rotate_confidence=args.rotate_confidence,
-                            deskew=args.deskew,
-                            refine_corners=args.refine_corners)
+                            deskew=args.deskew)
         
         if success and args.pdf:
             # Gather paths of the cropped images that were successfully generated

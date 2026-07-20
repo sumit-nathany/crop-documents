@@ -16,16 +16,23 @@ alwaysApply: false
 - `processor.normalized_to_pixels` flips Y: `py = (1 - y) * img_h`.
 - Missing/empty corners or `error` → skip image (not a hard crash).
 
-## Core behaviors to preserve
+## User-facing flags (keep simple)
 
-- **Expansion**: push corners outward from centroid by `expansion_pct` (natural margin, not a painted border). Clamp to image bounds before warp.
+| Flag | Behavior |
+|------|----------|
+| *(default)* | detect → expand → warp → save |
+| `--deskew` | Conservative align: refine keystone, upper-band deskew, top/bottom flap trim (wider border) |
+| `--rotate` | Tesseract OSD 90/180/270; PIL uses **`-angle`**; soft-skip if missing |
+
+Do not reintroduce separate `--experimental` / `--refine-corners` CLI flags — those are folded into `--deskew`.
+
+## Core contracts
+
+- **Expansion**: push corners outward from centroid by `expansion_pct`. Clamp before warp.
 - **Warp**: destination size from max opposite-edge lengths — **no forced aspect ratio**.
-- **Deskew** (`deskew_image`): Hough on long near-horizontal lines; skip if `|skew| < 0.3°`; `BORDER_REFLECT` fill.
-- **Rotate** (`auto_rotate_image`): Tesseract OSD; apply only if confidence ≥ threshold; PIL rotate uses **`-angle`** (undo OSD offset). Soft-skip if Tesseract missing.
-- HEIC: pillow-heif or `sips` fallback; always save as JPEG.
+- **HoughLinesP**: reshape to `(-1, 4)` — OpenCV may return `(N,1,4)` or `(N,4)`.
+- HEIC → JPEG via pillow-heif or `sips`.
 
-## CLI (`batch.py`)
+## CLI
 
-Flags: `--input`, `--output`, `--expansion`, `--deskew`, `--refine-corners`, `--rotate`, `--rotate-confidence`, `--watch`, `--pdf`. Config defaults live in `config.yaml`.
-
-When changing deskew/rotate: keep opt-in flags, keep soft-fail behavior, and run `lab/run_regression.py` if `lab/cases/` has images.
+Flags: `--input`, `--output`, `--expansion`, `--deskew`, `--rotate`, `--rotate-confidence`, `--watch`, `--pdf`. Defaults in `config.yaml`.

@@ -27,7 +27,6 @@ VARIANTS: dict[str, dict] = {
     "deskew": {"deskew": True},
     "rotate": {"auto_rotate": True},
     "deskew_rotate": {"deskew": True, "auto_rotate": True},
-    "refine_deskew": {"refine_corners_opt": True, "deskew": True},
 }
 
 

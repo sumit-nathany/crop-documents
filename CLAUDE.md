@@ -18,7 +18,7 @@ Optional rotate: `brew install tesseract` and `pip install pytesseract`.
 
 ```
 image → detector/detect (Vision JSON) → processor.py
-         → expand → warp → [refine] → [deskew] → [OSD rotate] → save
+         → expand → warp → [--deskew align stack] → [--rotate OSD] → save
 batch.py orchestrates; pdf_builder.py merges crops; config.yaml defaults.
 ```
 
@@ -41,9 +41,9 @@ Vision coords: normalized, origin bottom-left, order TL,TR,BR,BL. Python flips Y
 
 ## Known soft spots
 
-- Fine deskew (Hough + reflect fill) can miss sparse text or over-rotate noisy edges.
+- `--deskew` is a conservative align stack (refine, upper-band deskew, top/bottom flap trim). Vision re-square / color-flap trim are off by default.
+- Residual **perspective / cardboard bow** on handheld box photos cannot be fully removed by one plane warp.
 - OSD auto-rotate depends on Tesseract confidence; 90°/270° must use negated PIL angle.
-- Corner refine is heuristic for keystone / folded corners.
 
 ## Regression
 
