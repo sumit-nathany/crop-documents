@@ -161,5 +161,18 @@ crop-documents/
 ├── config.yaml        # Default global configurations
 ├── setup.sh           # Automatic compile and environment bootstrap script
 ├── requirements.txt   # Python dependency list
+├── lab/               # Deskew/rotation regression cases + runner
+├── CLAUDE.md          # Agent context (Claude Code)
+├── .cursor/rules/     # Agent context (Cursor)
 └── README.md          # Project documentation
 ```
+
+### Pipeline lab (deskew / rotation)
+
+Drop hard photos into `lab/cases/`, then:
+
+```bash
+python3 lab/run_regression.py
+```
+
+See [lab/README.md](lab/README.md). Prefer fixing deskew/rotation here before any iPhone port.

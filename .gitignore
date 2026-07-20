@@ -3,3 +3,8 @@ __pycache__/
 .DS_Store
 .module-cache/
 detector/detect
+
+# Pipeline lab: keep structure, ignore local photos & outputs
+lab/cases/*
+!lab/cases/.gitkeep
+lab/out/

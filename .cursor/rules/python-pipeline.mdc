@@ -1,0 +1,31 @@
+---
+description: Python crop pipeline contracts and CLI conventions
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python pipeline
+
+## Detector JSON (from `detector/detect`)
+
+```json
+{"corners":[{"x":0.1,"y":0.9},...],"confidence":0.95,"error":null}
+```
+
+- Corners: Vision normalized, origin **bottom-left**, order TL→TR→BR→BL.
+- `processor.normalized_to_pixels` flips Y: `py = (1 - y) * img_h`.
+- Missing/empty corners or `error` → skip image (not a hard crash).
+
+## Core behaviors to preserve
+
+- **Expansion**: push corners outward from centroid by `expansion_pct` (natural margin, not a painted border). Clamp to image bounds before warp.
+- **Warp**: destination size from max opposite-edge lengths — **no forced aspect ratio**.
+- **Deskew** (`deskew_image`): Hough on long near-horizontal lines; skip if `|skew| < 0.3°`; `BORDER_REFLECT` fill.
+- **Rotate** (`auto_rotate_image`): Tesseract OSD; apply only if confidence ≥ threshold; PIL rotate uses **`-angle`** (undo OSD offset). Soft-skip if Tesseract missing.
+- HEIC: pillow-heif or `sips` fallback; always save as JPEG.
+
+## CLI (`batch.py`)
+
+Flags: `--input`, `--output`, `--expansion`, `--deskew`, `--refine-corners`, `--rotate`, `--rotate-confidence`, `--watch`, `--pdf`. Config defaults live in `config.yaml`.
+
+When changing deskew/rotate: keep opt-in flags, keep soft-fail behavior, and run `lab/run_regression.py` if `lab/cases/` has images.

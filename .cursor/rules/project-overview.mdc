@@ -1,0 +1,30 @@
+---
+description: Project purpose, architecture, and roadmap for crop-documents
+alwaysApply: true
+---
+
+# Document Auto-Crop (crop-documents)
+
+macOS **CLI** that detects, crops, and de-skews photos of documents/receipts/cards with a natural background margin, then optionally builds PDFs. Uses Apple Vision + Python/OpenCV.
+
+## Module map
+
+| Path | Role |
+|------|------|
+| `detector/detect.swift` → `detector/detect` | Vision `VNDetectDocumentSegmentationRequest` → JSON corners |
+| `processor.py` | Load, expand quad, warp, optional refine/deskew/OSD rotate, save |
+| `batch.py` | CLI: batch, `--watch`, `--pdf`, flags |
+| `pdf_builder.py` | Lossless PDF via img2pdf |
+| `config.yaml` | Defaults (expansion, quality, rotate, deskew, refine) |
+| `setup.sh` | Compile Swift binary + pip install |
+
+## Pipeline order (do not reorder casually)
+
+1. Vision detect corners → 2. optional refine → 3. expand from centroid → 4. perspective warp → 5. optional Hough deskew → 6. optional Tesseract OSD rotate → 7. save (HEIC→JPEG)
+
+## Agent rules of engagement
+
+- **CLI is the algorithm lab.** Iterate deskew/rotation in `processor.py`; validate with `batch.py` / `lab/run_regression.py`.
+- **Product priority: iPhone first**, Mac GUI deferred. Do not scaffold apps until the user asks and pipeline quality is acceptable.
+- macOS 13+, Xcode CLT required. Run `./setup.sh` before first use if `detector/detect` is missing.
+- Soft spots still evolving: **deskew** and **auto-rotate**. Detection + warp are the more stable half.
