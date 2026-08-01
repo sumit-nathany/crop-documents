@@ -10,6 +10,7 @@ A high-performance, local command-line utility for macOS to automatically detect
 - 🖼️ **Natural Border**: Instead of drawing artificial colored borders, the tool pushes the crop boundary outward from the document's center (by a configurable %). This preserves a sliver of the actual background (table surface, hands, etc.) to look natural.
 - 📐 **Perspective Correction & No Aspect Ratio Limits**: De-skews papers shot at an angle, automatically adjusting the output shape to match the document's true proportions (long receipts, square cards, landscape documents, etc.).
 - 🔄 **Auto-Rotation (opt-in)**: After cropping, uses Tesseract OSD to detect and correct documents that are rotated 90°, 180°, or 270°. Skips gracefully when confidence is low or Tesseract is not installed.
+- ✨ **Apple Photos Auto-Enhancement (`--enhance`)**: Leverages Apple's native CoreImage `autoAdjustmentFilters` (exposure, contrast, tone curves, color balance) via a compiled Swift binary.
 - 🍏 **Native HEIC/HEIF Support**: Directly handles photos taken with your iPhone, saving them as high-quality JPEGs.
 - 📂 **Auto Folder Watcher**: Background agent monitors a directory and auto-processes incoming pictures.
 - 📄 **Lossless PDF Generation**: Merges crops into custom PDFs, fitting each page exactly to the image's dimensions.
@@ -121,6 +122,18 @@ python3 batch.py --input ./photos/ --rotate --rotate-confidence 0.5
 
 > **Requires:** `brew install tesseract` and `pip install pytesseract`  
 > If Tesseract is not installed, the step is silently skipped — no crash.
+
+### 7. Apple Photos Auto-Enhancement (`--enhance` / `-a`)
+Applies Apple's native CoreImage `autoAdjustmentFilters` (the exact same engine used by Apple Photos / iOS Photos app) to balance exposure, contrast, tone curves, and colors:
+
+```bash
+# Crop + apply Apple Photos auto-enhancement
+python3 batch.py --input ~/Downloads/Receipts/ --enhance
+
+# Combine crop, deskew, auto-rotate, and auto-enhance into PDF
+python3 batch.py --input ~/Downloads/Receipts/ --deskew --rotate --enhance --pdf bundle.pdf
+```
+
 
 ---
 

@@ -46,7 +46,24 @@ xcrun swiftc "$SWIFT_SRC" \
     -module-cache-path "$MODULE_CACHE" \
     -O \
     -o "$BINARY"
-echo "✅  Binary compiled → $BINARY"
+echo "✅  Vision detector compiled → $BINARY"
+
+ENHANCER_DIR="$SCRIPT_DIR/enhancer"
+ENHANCER_BIN="$ENHANCER_DIR/enhance"
+ENHANCER_SRC="$ENHANCER_DIR/enhance.swift"
+
+echo "⚙️   Compiling Swift CoreImage enhancer..."
+rm -f "$ENHANCER_BIN"
+xcrun swiftc "$ENHANCER_SRC" \
+    -framework Foundation \
+    -framework CoreImage \
+    -framework ImageIO \
+    -framework CoreGraphics \
+    -module-cache-path "$MODULE_CACHE" \
+    -O \
+    -o "$ENHANCER_BIN"
+echo "✅  CoreImage enhancer compiled → $ENHANCER_BIN"
+
 
 # ── 4. Python deps ──────────────────────────
 echo ""

@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 .module-cache/
 detector/detect
+enhancer/enhance
 
 # Pipeline lab: keep structure, ignore local photos & outputs
 lab/cases/*

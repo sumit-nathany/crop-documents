@@ -43,12 +43,36 @@ try:
 except ImportError:
     _HEIC_BACKEND = "sips"          # macOS built-in, zero extra deps
 
-# ── Path to the compiled Swift detector binary ────────────────────────────────
+# ── Path to the compiled Swift binaries ────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).parent
 DETECTOR_BIN = SCRIPT_DIR / "detector" / "detect"
+ENHANCER_BIN = SCRIPT_DIR / "enhancer" / "enhance"
 
 # ── Supported input formats ───────────────────────────────────────────────────
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tiff", ".tif", ".heic", ".heif"}
+
+
+def enhance_image(image_path: Path, quality: float = 0.95) -> bool:
+    """
+    Apply native Apple Photos CoreImage auto-enhancements to `image_path` in place.
+    (exposure, contrast, tone curves, color balance).
+    """
+    if not ENHANCER_BIN.exists():
+        print(f"  ⚠️  Enhancer binary not found at {ENHANCER_BIN}. Run setup.sh first.")
+        return False
+
+    result = subprocess.run(
+        [str(ENHANCER_BIN), str(image_path), str(image_path), str(quality)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True
+    else:
+        err = result.stderr.strip() or "enhancer error"
+        print(f"  ⚠️  Auto-enhancement failed: {err}")
+        return False
+
 
 
 def detect_corners(image_path: Path) -> Optional[dict]:
@@ -206,6 +230,7 @@ def process_image(
     rotate_confidence: float = 1.0,
     deskew: bool = False,
     deskew_max_angle: float = 15.0,
+    auto_enhance: bool = False,
 ) -> bool:
     """
     Full pipeline for a single image.
@@ -220,6 +245,9 @@ def process_image(
 
     If `auto_rotate` is True, Tesseract OSD corrects 90°/180°/270° orientation
     (requires tesseract).
+
+    If `auto_enhance` is True, native Apple CoreImage auto-enhancement is applied
+    (exposure, contrast, tone curves, color balance).
     """
     # ── Load image ──────────────────────────────────────────────────────────
     try:
@@ -317,10 +345,16 @@ def process_image(
         out_path = out_path.with_suffix(".jpg")
         out_pil.save(out_path, format="JPEG", quality=95, subsampling=0)
 
+    # ── Native Apple Auto-Enhancement (optional) ───────────────────────────
+    if auto_enhance:
+        enhance_image(out_path)
+
     confidence = detection.get("confidence")
     conf_str = f" (confidence {confidence:.2f})" if confidence is not None else ""
-    print(f"  ✅  Saved → {out_path.name}{conf_str}")
+    enhance_str = " ✨ enhanced" if auto_enhance else ""
+    print(f"  ✅  Saved → {out_path.name}{conf_str}{enhance_str}")
     return True
+
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

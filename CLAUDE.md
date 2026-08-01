@@ -18,17 +18,19 @@ Optional rotate: `brew install tesseract` and `pip install pytesseract`.
 
 ```
 image → detector/detect (Vision JSON) → processor.py
-         → expand → warp → [--deskew align stack] → [--rotate OSD] → save
+         → expand → warp → [--deskew align stack] → [--rotate OSD] → save → [--enhance CoreImage]
 batch.py orchestrates; pdf_builder.py merges crops; config.yaml defaults.
 ```
 
 | File | Responsibility |
 |------|----------------|
 | `detector/detect.swift` | Vision segmentation → JSON corners |
+| `enhancer/enhance.swift` | CoreImage autoAdjustmentFilters → Apple Photos auto-enhancement |
 | `processor.py` | Full image pipeline |
 | `batch.py` | CLI entry (batch / watch / pdf) |
 | `pdf_builder.py` | img2pdf assembler |
 | `lab/` | Regression cases + runner for deskew/rotate work |
+
 
 Vision coords: normalized, origin bottom-left, order TL,TR,BR,BL. Python flips Y for OpenCV.
 
