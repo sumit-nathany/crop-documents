@@ -282,9 +282,27 @@ public enum DocumentTrimmer {
         return gray
     }
 
-    private static func cannyLite(gray: [UInt8], width w: Int, height h: Int) -> [UInt8] {
+    /// Sobel-magnitude edge map with Canny-style hysteresis.
+    ///
+    /// Stands in for `cv2.Canny(blur, 50, 150)`. It skips non-maximum suppression — the
+    /// trimmer only ever consumes row/column edge *densities*, so thicker edges wash out —
+    /// but the hysteresis matters and is implemented: pixels above `high` are edges, pixels
+    /// between `low` and `high` are edges only when connected to one.
+    ///
+    /// (Previously this compared `mag >= 50 && mag <= 150`, reading Canny's two thresholds
+    /// as a band. That discarded every *strong* edge — document borders and text, exactly
+    /// what the trimmer looks for — and made trim decisions diverge wildly from the Python
+    /// pipeline in both directions.)
+    private static func cannyLite(
+        gray: [UInt8],
+        width w: Int,
+        height h: Int,
+        low: Int = 50,
+        high: Int = 150
+    ) -> [UInt8] {
         let blurred = boxBlur3(gray, width: w, height: h)
-        var edges = [UInt8](repeating: 0, count: w * h)
+
+        var magnitude = [Int](repeating: 0, count: w * h)
         for y in 1..<(h - 1) {
             for x in 1..<(w - 1) {
                 let gx = Int(blurred[(y - 1) * w + (x + 1)]) + 2 * Int(blurred[y * w + (x + 1)])
@@ -295,10 +313,35 @@ public enum DocumentTrimmer {
                     + Int(blurred[(y + 1) * w + (x + 1)])
                     - Int(blurred[(y - 1) * w + (x - 1)]) - 2 * Int(blurred[(y - 1) * w + x])
                     - Int(blurred[(y - 1) * w + (x + 1)])
-                let mag = min(255, Int(hypot(Double(gx), Double(gy))))
-                edges[y * w + x] = mag >= 50 && mag <= 150 ? 255 : 0
+                magnitude[y * w + x] = Int(hypot(Double(gx), Double(gy)))
             }
         }
+
+        // Strong pixels seed the output; weak pixels join via flood fill from a strong one.
+        var edges = [UInt8](repeating: 0, count: w * h)
+        var stack: [Int] = []
+        for i in 0..<(w * h) where magnitude[i] >= high {
+            edges[i] = 255
+            stack.append(i)
+        }
+
+        while let index = stack.popLast() {
+            let y = index / w
+            let x = index % w
+            for dy in -1...1 {
+                for dx in -1...1 where dx != 0 || dy != 0 {
+                    let ny = y + dy
+                    let nx = x + dx
+                    guard ny >= 1, ny < h - 1, nx >= 1, nx < w - 1 else { continue }
+                    let n = ny * w + nx
+                    if edges[n] == 0 && magnitude[n] >= low {
+                        edges[n] = 255
+                        stack.append(n)
+                    }
+                }
+            }
+        }
+
         return edges
     }
 

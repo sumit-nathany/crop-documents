@@ -11,7 +11,10 @@ struct Options {
     var rotate = false
     var enhance = false
     var watch = false
-    var pdf: URL?
+    /// Kept as the raw argument, not a URL: `URL(fileURLWithPath:)` resolves a relative path
+    /// against the process CWD immediately, which would lose the distinction between
+    /// "receipts.pdf" (meaning: in the output directory) and an explicit absolute path.
+    var pdf: String?
     var jpegQuality: Double = 0.95
     var verbose = false
 
@@ -22,6 +25,14 @@ struct Options {
             enhance: enhance,
             autoRotate: rotate
         )
+    }
+
+    /// Where the `--pdf` file should land. A bare name goes in the output directory (matching
+    /// `batch.py`); an absolute path is honoured as given.
+    static func resolvePDFURL(_ argument: String, outputDirectory: URL) -> URL {
+        argument.hasPrefix("/")
+            ? URL(fileURLWithPath: argument)
+            : outputDirectory.appendingPathComponent(argument)
     }
 
     /// Output directory, defaulting to the input folder (or the file's parent).
@@ -117,7 +128,7 @@ extension Options {
             case "-w", "--watch":
                 options.watch = true
             case "--pdf":
-                options.pdf = URL(fileURLWithPath: try nextValue(arg))
+                options.pdf = try nextValue(arg)
             case "--jpeg-quality":
                 options.jpegQuality = try number(arg)
             case "-v", "--verbose":

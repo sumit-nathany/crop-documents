@@ -149,10 +149,8 @@ struct BatchRunner {
         print("\n  Skipped log → \(logURL.path)")
     }
 
-    private func buildPDF(from images: [URL], name: URL, outputDirectory: URL) {
-        let pdfURL = name.path.hasPrefix("/")
-            ? name
-            : outputDirectory.appendingPathComponent(name.lastPathComponent)
+    private func buildPDF(from images: [URL], name: String, outputDirectory: URL) {
+        let pdfURL = Options.resolvePDFURL(name, outputDirectory: outputDirectory)
         print("\n📄  Combining \(images.count) image(s) into PDF: \(pdfURL.lastPathComponent)")
         do {
             let report = try DocumentPDFBuilder.build(from: images, to: pdfURL)
