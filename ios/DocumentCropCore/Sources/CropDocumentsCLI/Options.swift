@@ -16,7 +16,12 @@ struct Options {
     var verbose = false
 
     var settings: CropSettings {
-        CropSettings(expansionPercent: expansion, straighten: deskew, enhance: enhance)
+        CropSettings(
+            expansionPercent: expansion,
+            straighten: deskew,
+            enhance: enhance,
+            autoRotate: rotate
+        )
     }
 
     /// Output directory, defaulting to the input folder (or the file's parent).
@@ -60,7 +65,8 @@ extension Options {
       -o, --output <dir>        Output directory (default: same folder as --input)
       -e, --expansion <pct>     Border expanded beyond the detected edges (default: 4)
       -d, --deskew              Align: keystone refine, micro-rotation, top/bottom flap trim
-      -r, --rotate              Fix 90°/180°/270° orientation via Vision text detection
+      -r, --rotate              Straighten a sideways page via Vision text detection.
+                                Does not flip 180° — see DocumentOrienter for why.
       -a, --enhance             Apple Photos CoreImage auto-enhancement
       -w, --watch               Watch the input folder and process new images as they land
           --pdf <name>          Combine the cropped images into one PDF in the output dir

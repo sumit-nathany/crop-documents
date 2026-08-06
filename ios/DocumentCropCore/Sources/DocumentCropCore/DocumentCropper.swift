@@ -87,6 +87,13 @@ public enum DocumentCropper {
             warped = trimmed
         }
 
+        // Quarter-turn correction runs after the align stack, matching the Python order:
+        // deskew fixes small angles on the assumption the page is roughly upright, so
+        // flipping it 90° first would invalidate that.
+        if settings.autoRotate {
+            warped = DocumentOrienter.autoRotate(warped)
+        }
+
         if settings.enhance {
             warped = DocumentEnhancer.enhance(warped)
             CropLogger.shared.info("Enhanced")

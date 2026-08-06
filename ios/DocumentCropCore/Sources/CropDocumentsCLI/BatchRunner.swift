@@ -128,7 +128,7 @@ struct BatchRunner {
             """)
         }
         if options.rotate {
-            print("🔄  Auto-rotate: ON (Vision text orientation)")
+            print("🔄  Auto-rotate: ON (Vision text — sideways pages only, no 180° flip)")
         }
         if options.enhance {
             print("✨  Auto-enhance: ON (Apple CoreImage)")

@@ -181,11 +181,21 @@ public struct CropSettings: Sendable, Equatable {
     public var straighten: Bool
     /// Apple Photos CoreImage auto-enhance (matches CLI `--enhance`).
     public var enhance: Bool
+    /// Correct 90°/180°/270° orientation via Vision text recognition (matches CLI `--rotate`).
+    /// Off by default, like Python's `config.yaml` — a wrong quarter turn is very visible,
+    /// so this stays opt-in.
+    public var autoRotate: Bool
 
-    public init(expansionPercent: Double = 4.0, straighten: Bool = false, enhance: Bool = false) {
+    public init(
+        expansionPercent: Double = 4.0,
+        straighten: Bool = false,
+        enhance: Bool = false,
+        autoRotate: Bool = false
+    ) {
         self.expansionPercent = expansionPercent
         self.straighten = straighten
         self.enhance = enhance
+        self.autoRotate = autoRotate
     }
 
     /// Effective expansion for warp + trim padding.

@@ -7,6 +7,14 @@ import Foundation
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 
+// Diagnostic subcommand: report the quarter turn the orienter detects for each file,
+// without modifying anything. Used by lab/ to regression-test auto-rotate against
+// known-orientation fixtures. Undocumented in --help; it is a developer tool.
+if arguments.first == "probe-orientation" {
+    ProbeCommand.run(paths: Array(arguments.dropFirst()))
+    exit(0)
+}
+
 let options: Options
 do {
     guard let parsed = try Options.parse(arguments) else {
