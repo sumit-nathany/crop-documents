@@ -1,6 +1,17 @@
-# Document Auto-Crop & PDF Bundle Tool (macOS)
+# Document Auto-Crop & PDF Bundle Tool (macOS + iOS)
 
-A high-performance, local command-line utility for macOS to automatically detect, crop, and de-skew pictures of documents, receipts, bills, and cards. It preserves a natural background margin so they look like well-framed photos rather than sterile scans, and can automatically bundle them into custom PDFs.
+A local tool for macOS and iOS that automatically detects, crops, and de-skews photos of documents, receipts, bills, and cards. It preserves a natural background margin so they look like well-framed photos rather than sterile scans, and can bundle them into PDFs.
+
+The Mac CLI and the iPhone app share one engine — the `DocumentCropCore` Swift package — so a change to detection, warping, or trimming lands on both platforms at once. Each front end only picks files and shows results.
+
+```
+                    ┌──────────────────────┐
+   Mac CLI ────────▶│  DocumentCropCore    │
+   (crop-documents) │  detect → warp →     │
+                    │  align → rotate →    │
+   iPhone app ─────▶│  enhance → save      │
+   (ios/Margin)     └──────────────────────┘
+```
 
 ---
 
@@ -9,31 +20,30 @@ A high-performance, local command-line utility for macOS to automatically detect
 - 🧠 **ML-Based Detection**: Uses Apple's native on-device **Vision Framework** (`VNDetectDocumentSegmentationRequest`) for high-accuracy quadrilateral segmentations.
 - 🖼️ **Natural Border**: Instead of drawing artificial colored borders, the tool pushes the crop boundary outward from the document's center (by a configurable %). This preserves a sliver of the actual background (table surface, hands, etc.) to look natural.
 - 📐 **Perspective Correction & No Aspect Ratio Limits**: De-skews papers shot at an angle, automatically adjusting the output shape to match the document's true proportions (long receipts, square cards, landscape documents, etc.).
-- 🔄 **Auto-Rotation (opt-in)**: After cropping, uses Tesseract OSD to detect and correct documents that are rotated 90°, 180°, or 270°. Skips gracefully when confidence is low or Tesseract is not installed.
-- ✨ **Apple Photos Auto-Enhancement (`--enhance`)**: Leverages Apple's native CoreImage `autoAdjustmentFilters` (exposure, contrast, tone curves, color balance) via a compiled Swift binary.
+- 🔄 **Auto-Rotation (opt-in)**: After cropping, uses Vision text recognition to straighten a sideways page. It deliberately does *not* flip 180° — Vision reads upside-down text nearly as well as upright text, so that call would be a coin toss (see `DocumentOrienter`).
+- ✨ **Apple Photos Auto-Enhancement (`--enhance`)**: Leverages Apple's native CoreImage `autoAdjustmentFilters` (exposure, contrast, tone curves, color balance).
+- 📦 **Zero runtime dependencies**: No Python, OpenCV, Tesseract, or `img2pdf`. Everything is Vision, CoreImage, and CoreGraphics.
 - 🍏 **Native HEIC/HEIF Support**: Directly handles photos taken with your iPhone, saving them as high-quality JPEGs.
 - 📂 **Auto Folder Watcher**: Background agent monitors a directory and auto-processes incoming pictures.
 - 📄 **Lossless PDF Generation**: Merges crops into custom PDFs, fitting each page exactly to the image's dimensions.
 
 ---
 
-## Setup & Prerequisites
+## Setup
 
-This tool requires **macOS 13+ (Ventura)** or later and Xcode Command Line Tools.
+Requires **macOS 13+ (Ventura)** and Xcode Command Line Tools. Nothing else.
 
-1. **Clone & Setup**:
-   ```bash
-   cd crop-documents
-   chmod +x setup.sh
-   ./setup.sh
-   ```
-   *Note: This script compiles the Swift native binary (`detector/detect`) and installs Python dependencies (`opencv-python`, `pillow`, `pillow-heif`, `img2pdf`, `watchdog`, `pyyaml`, `numpy`).*
+```bash
+cd crop-documents
+./build-cli.sh
+```
 
-2. **(Optional) Auto-Rotation** — install Tesseract if you want `--rotate` support:
-   ```bash
-   brew install tesseract
-   pip install pytesseract
-   ```
+That builds `./crop-documents` (release mode — the pixel loops are ~10x slower
+unoptimized). To use it from anywhere:
+
+```bash
+sudo ln -sf "$PWD/crop-documents" /usr/local/bin/
+```
 
 ---
 
@@ -46,32 +56,32 @@ If you omit the `--output` parameter, the cropped images will automatically be s
 
 ```bash
 # Crop all images in the current folder
-python3 batch.py
+./crop-documents
 
 # Crop images in a specific directory
-python3 batch.py --input ~/Downloads/Receipts/
+./crop-documents --input ~/Downloads/Receipts/
 
 # Crop a single file
-python3 batch.py --input ~/Downloads/Receipts/receipt_01.heic
+./crop-documents --input ~/Downloads/Receipts/receipt_01.heic
 
 # Crop and save to a custom output directory
-python3 batch.py --input ~/Downloads/Receipts/ --output ./cropped_results/
+./crop-documents --input ~/Downloads/Receipts/ --output ./cropped_results/
 ```
 
 ### 2. Adjusting the Border Context
 You can control the natural background border via the `--expansion` (`-e`) flag (as a percentage of the document size). Default is `4.0`.
 ```bash
 # Get a wider natural background border (e.g., 6% padding)
-python3 batch.py --expansion 6.0
+./crop-documents --expansion 6.0
 
 # Crop tightly to the detected document edges (0% padding)
-python3 batch.py --expansion 0.0
+./crop-documents --expansion 0.0
 ```
 
 ### 3. Automatically Watch a Folder (`--watch`)
 Monitors a folder in the background. Dropping new photos here auto-crops them into the output directory:
 ```bash
-python3 batch.py --input ~/Desktop/ScansInbox/ --output ~/Desktop/Processed/ --watch
+./crop-documents --input ~/Desktop/ScansInbox/ --output ~/Desktop/Processed/ --watch
 ```
 *To stop the watcher, press `Ctrl+C` in your terminal.*
 
@@ -80,17 +90,15 @@ You can output crops directly into a single PDF, or compile pre-cropped images:
 
 **Crop and bundle in one command:**
 ```bash
-python3 batch.py --input ~/Downloads/Bills/ --pdf final_bills.pdf
+./crop-documents --input ~/Downloads/Bills/ --pdf final_bills.pdf
 ```
 *(Creates `final_bills.pdf` inside the output directory containing all successfully processed documents).*
 
-**Standalone compilation of pre-cropped images:**
+**Bundling images that are already cropped:**
 ```bash
-# Merge an entire directory of images
+# Point at the folder with --expansion 0 to pass them through, or use the
+# legacy standalone builder:
 python3 pdf_builder.py ./cropped_results/ --output ~/Desktop/monthly_report.pdf
-
-# Merge specific images manually
-python3 pdf_builder.py file1.jpg file2.png file3.jpg --output ~/Desktop/bundled.pdf
 ```
 
 ### 5. Alignment (`--deskew`)
@@ -98,40 +106,52 @@ python3 pdf_builder.py file1.jpg file2.png file3.jpg --output ~/Desktop/bundled.
 Fixes keystone, micro-rotation, and open flaps (top/bottom). Use this for handheld photos:
 
 ```bash
-python3 batch.py --input ~/Downloads/Receipts/ --deskew
+./crop-documents --input ~/Downloads/Receipts/ --deskew
 
-# Align + fix sideways/upside-down pages
-python3 batch.py --input ~/Downloads/Receipts/ --deskew --rotate
+# Align + straighten sideways pages
+./crop-documents --input ~/Downloads/Receipts/ --deskew --rotate
 ```
 
 > **Note:** Deskew fills empty corner triangles from rotation by mirroring the natural background padding.
+>
+> **Status:** the Swift port of the flap trim is not yet at full parity with the
+> Python pipeline — it is more conservative and can leave a flap Python would trim.
+> See "Why the Python CLI is still here" below.
 
 ### 6. Auto-Rotation (`--rotate` / `-r`)
-When a document is photographed rotated (e.g. sideways or upside-down), use `--rotate` to let Tesseract detect and fix the orientation **after** cropping:
+When a page is photographed sideways, `--rotate` straightens it **after** cropping using Vision text recognition:
 
 ```bash
-# Crop + auto-rotate using Tesseract OSD
-python3 batch.py --input ~/Downloads/Receipts/ --rotate
+# Crop + straighten sideways pages
+./crop-documents --input ~/Downloads/Receipts/ --rotate
 
 # Combine with PDF export
-python3 batch.py --input ~/Downloads/Bills/ --rotate --pdf bills.pdf
-
-# Adjust OSD confidence threshold (default 1.0; lower = more aggressive)
-python3 batch.py --input ./photos/ --rotate --rotate-confidence 0.5
+./crop-documents --input ~/Downloads/Bills/ --rotate --pdf bills.pdf
 ```
 
-> **Requires:** `brew install tesseract` and `pip install pytesseract`  
-> If Tesseract is not installed, the step is silently skipped — no crash.
+> **Scope: sideways pages only — this does not flip 180°.**
+> The orienter reads text at each quarter turn and keeps the best-scoring one.
+> Measured on rotated fixtures, the correct *axis* wins by more than 10x, but the
+> 180° partner scores within ~1% and is sometimes *higher* — Vision reads
+> upside-down text nearly as well as upright text. Rather than coin-flip on a very
+> visible error, it corrects the axis and leaves flips alone. If nothing reads
+> confidently, the image is left untouched.
+
+To see the decision without cropping anything:
+
+```bash
+./crop-documents probe-orientation ~/Downloads/Receipts/*.jpg
+```
 
 ### 7. Apple Photos Auto-Enhancement (`--enhance` / `-a`)
 Applies Apple's native CoreImage `autoAdjustmentFilters` (the exact same engine used by Apple Photos / iOS Photos app) to balance exposure, contrast, tone curves, and colors:
 
 ```bash
 # Crop + apply Apple Photos auto-enhancement
-python3 batch.py --input ~/Downloads/Receipts/ --enhance
+./crop-documents --input ~/Downloads/Receipts/ --enhance
 
 # Combine crop, deskew, auto-rotate, and auto-enhance into PDF
-python3 batch.py --input ~/Downloads/Receipts/ --deskew --rotate --enhance --pdf bundle.pdf
+./crop-documents --input ~/Downloads/Receipts/ --deskew --rotate --enhance --pdf bundle.pdf
 ```
 
 
@@ -139,21 +159,12 @@ python3 batch.py --input ~/Downloads/Receipts/ --deskew --rotate --enhance --pdf
 
 ## Configuration
 
-You can tweak the default settings globally inside `config.yaml`:
+The Swift CLI takes its settings from flags, with the same defaults `config.yaml`
+documented (`--expansion 4`, deskew/rotate/enhance all off). `config.yaml` is still
+read by the legacy Python pipeline in `lab/`.
 
-```yaml
-# Default border expansion percentage
-expansion_pct: 4.0
-
-# Output folder fallback
-output_dir: "./output"
-
-# Output JPEG quality (60-100)
-jpeg_quality: 95
-
-# Auto-rotation via Tesseract OSD (opt-in; requires tesseract + pytesseract)
-auto_rotate: false
-rotate_confidence: 1.0   # 0.0–∞, higher = more conservative
+```bash
+./crop-documents --expansion 6 --jpeg-quality 0.9 --input ./photos/
 ```
 
 ---
@@ -162,21 +173,36 @@ rotate_confidence: 1.0   # 0.0–∞, higher = more conservative
 
 ```
 crop-documents/
-├── detector/
-│   ├── detect.swift   # Swift script calling Apple Vision Framework
-│   └── detect         # Compiled native Swift binary (macOS execution)
-├── batch.py           # CLI runner (Watch, Batch, PDF flags)
-├── processor.py       # Image processing, perspective warp, and HEIC loader
-├── pdf_builder.py     # Lossless PDF assembler using img2pdf
-├── config.yaml        # Default global configurations
-├── setup.sh           # Automatic compile and environment bootstrap script
-├── requirements.txt   # Python dependency list
-├── lab/               # Deskew/rotation regression cases + runner
-├── ios/               # Margin iPhone app (SwiftUI + DocumentCropCore)
-├── CLAUDE.md          # Agent context (Claude Code)
-├── .cursor/rules/     # Agent context (Cursor)
-└── README.md          # Project documentation
+├── build-cli.sh                        # Builds ./crop-documents (release)
+├── ios/
+│   ├── DocumentCropCore/               # THE ENGINE — shared by CLI and app
+│   │   ├── Sources/DocumentCropCore/   #   detect, warp, trim, orient, enhance, IO, PDF
+│   │   ├── Sources/CropDocumentsCLI/   #   Mac front end (args, file walk, console)
+│   │   └── Tests/                      #   swift test
+│   ├── Margin/                         # iPhone front end (SwiftUI)
+│   └── Margin.xcodeproj                # Generated — re-run xcodegen after adding files
+├── lab/                                # Deskew/rotation regression harness (Python)
+├── legacy Python CLI ────────────────  # Reference implementation, still runnable
+│   ├── batch.py  processor.py  pdf_builder.py
+│   ├── detector/detect.swift  enhancer/enhance.swift
+│   ├── config.yaml  setup.sh  requirements.txt
+├── CLAUDE.md                           # Agent context (Claude Code)
+├── .cursor/rules/                      # Agent context (Cursor)
+└── README.md
 ```
+
+### Why the Python CLI is still here
+
+The Swift CLI reproduces the default crop path exactly — same detections, same
+output dimensions, same confidences, with pixel differences only at high-gradient
+edges (Lanczos vs CoreImage resampling).
+
+`--deskew` is not yet at full parity. On the lab set, one image matches Python
+exactly and the other keeps a flap that Python trims. Swift errs conservative
+there, which is the safe direction, but it is a real gap — and `processor.py` is
+the only ground truth for closing it. Keeping deskew development in Python against
+`lab/` is the project's stated priority, so the reference implementation stays
+until the port is verified.
 
 ### iPhone app (Margin)
 
@@ -198,7 +224,7 @@ python3 lab/run_regression.py --variants crop,deskew
 CLI:
 
 ```bash
-python3 batch.py --input ./photos/ --deskew
+./crop-documents --input ./photos/ --deskew
 ```
 
 See [lab/README.md](lab/README.md).

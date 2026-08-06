@@ -16,3 +16,6 @@ ios/**/DerivedData/
 ios/*.xcworkspace/xcuserdata/
 *.xcuserstate
 ios/**/.build/
+
+# Swift CLI build output (symlink to .build/release/crop-documents)
+/crop-documents

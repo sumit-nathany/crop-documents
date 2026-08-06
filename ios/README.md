@@ -19,14 +19,26 @@ Requires Xcode 16+, iOS 17+. Use a real iPhone for camera + saving to Photos.
 3. Optional CoreImage auto-enhance (`--enhance` on CLI)
 4. Save to Photos or share
 
-Pipeline matches the macOS CLI stable path in `processor.py` / `enhancer/enhance.swift`.
+The app and the Mac CLI (`./crop-documents`) run the *same* engine — `DocumentCropCore` —
+so crop behaviour is identical by construction rather than by porting.
+
+Note: `straighten` is currently off and its Settings toggle is hidden, pending on-device
+re-verification of the deskew angle estimate. See `HANDOFF.md`.
 
 ## Layout
 
 ```
 ios/
 ├── project.yml
-├── Margin/                  # SwiftUI app
-├── DocumentCropCore/        # Vision detect + warp
+├── Margin/                          # SwiftUI app (front end only)
+├── DocumentCropCore/
+│   ├── Sources/DocumentCropCore/    # Shared engine — detect, warp, trim, orient, enhance, IO, PDF
+│   ├── Sources/CropDocumentsCLI/    # Mac CLI front end
+│   └── Tests/
 └── README.md
 ```
+
+## Adding a file to DocumentCropCore
+
+Re-run `xcodegen generate`. SPM picks new files up automatically; the checked-in
+`.xcodeproj` does not, so the app will fail to compile while `swift build` stays green.

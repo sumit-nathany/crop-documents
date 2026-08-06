@@ -5,27 +5,50 @@ alwaysApply: true
 
 # Document Auto-Crop (crop-documents)
 
-macOS **CLI** that detects, crops, and de-skews photos of documents/receipts/cards with a natural background margin, optional alignment/rotation, and PDF bundling. Uses Apple Vision + Python/OpenCV.
+Detects, crops, and de-skews photos of documents/receipts/cards with a natural background
+margin, optional alignment/rotation, and PDF bundling. Two front ends — a **macOS CLI** and
+an **iPhone app** — over one shared Swift engine built on Apple Vision + CoreImage.
 
 ## Module map
 
 | Path | Role |
 |------|------|
-| `detector/detect.swift` → `detector/detect` | Vision `VNDetectDocumentSegmentationRequest` → JSON corners |
-| `processor.py` | Load, expand quad, warp, optional deskew/OSD rotate, save |
-| `batch.py` | CLI: batch, `--watch`, `--pdf`, flags |
-| `pdf_builder.py` | Lossless PDF via img2pdf |
-| `config.yaml` | Defaults (expansion, quality, deskew, rotate) |
-| `ios/Margin` | iPhone SwiftUI app (pick / camera → crop → Photos) |
-| `ios/DocumentCropCore` | Shared Vision detect + warp + deskew + trim + enhance |
+| `ios/DocumentCropCore/Sources/DocumentCropCore` | **The engine.** Detect, warp, deskew, trim, orient, enhance, image IO, PDF |
+| `ios/DocumentCropCore/Sources/CropDocumentsCLI` | Mac front end: arg parsing, file walk, console output |
+| `ios/Margin` | iPhone SwiftUI front end (pick / camera → crop → Photos) |
+| `lab/` | Deskew/rotate regression harness (Python) |
+| `processor.py`, `batch.py`, `pdf_builder.py`, `detector/`, `enhancer/` | Legacy Python CLI — reference implementation, still runnable |
 
 ## Pipeline
 
-1. Vision detect → 2. expand → 3. warp → 4. optional `--deskew` (align stack) → 5. optional `--rotate` → 6. save (HEIC→JPEG)
+load → Vision detect → expand quad → warp → optional `--deskew` (align + flap trim)
+→ optional `--rotate` (quarter turn) → optional `--enhance` → save (HEIC→JPEG)
 
 ## Agent rules of engagement
 
-- **CLI is the algorithm lab.** Iterate alignment in `processor.py`; validate with `batch.py` / `lab/run_regression.py`.
-- **iPhone app (`ios/Margin`)** is the product UI. Port stable crop behavior into `DocumentCropCore`; keep risky flap-trim experiments in Python until trusted.
-- Keep the public CLI simple: **`--deskew`** (align) and **`--rotate`** (90° OSD) — not a matrix of experimental/refine flags.
-- macOS 13+, Xcode CLT required. Run `./setup.sh` before first use if `detector/detect` is missing. Open `ios/Margin.xcodeproj` for the phone app.
+- **Fix pixels in `DocumentCropCore`, never in a front end.** Both platforms consume the
+  same engine; a fix applied in `ios/Margin` or the CLI is a fix that silently doesn't
+  ship to the other. The front ends only pick files and show results.
+- **Re-run `cd ios && xcodegen generate` after adding any core source file.** SPM globs the
+  directory but the checked-in `.xcodeproj` enumerates files, so skipping this leaves
+  `swift build` green while the iOS app fails to compile.
+- **Verify both front ends** after touching the core: `swift build --package-path
+  ios/DocumentCropCore` and `xcodebuild -project ios/Margin.xcodeproj -scheme Margin
+  -destination 'generic/platform=iOS Simulator' build`.
+- **Platform-specific tuning belongs in a policy type, not in shared code.** See
+  `DetectionPolicy` — iOS needs a strict area floor to reject sub-region latches on camera
+  photos; Mac needs a lenient one to match Python on curated files.
+- **Deskew is still under development in Python.** `processor.py` is the ground truth for
+  the unfinished trim port; validate with `lab/run_regression.py` before porting.
+- Keep the public CLI simple: **`--deskew`** (align) and **`--rotate`** (quarter turn) —
+  not a matrix of experimental flags.
+- macOS 13+, Xcode CLT. Run `./build-cli.sh` to build the CLI.
+
+## Current state
+
+- Default crop path: Swift CLI matches Python exactly (dimensions, confidences).
+- `--deskew`: **not at parity** — Swift is more conservative on flap trim. Last blocker
+  before retiring the Python pipeline.
+- `--rotate`: sideways pages only; deliberately does not flip 180° (Vision reads
+  upside-down text nearly as well as upright — see `DocumentOrienter`).
+- `straighten` is off by default and hidden in the iOS UI pending on-device re-verification.
