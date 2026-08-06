@@ -15,6 +15,8 @@
 		675AB2BD2472C1F16FD187A7 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71F9013379E4311B028F3150 /* Models.swift */; };
 		7B84FC15771E65C16DDE5930 /* CropLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09E2686E68C7B9E8A327907F /* CropLogger.swift */; };
 		7F40FF4E03CE6C572B898A30 /* DocumentWarper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F38A539D615B0491B5830A /* DocumentWarper.swift */; };
+		83AB3EA16036E899258E42CB /* DocumentImageIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A3416965A207F68BC132BC /* DocumentImageIO.swift */; };
+		8F2B16A4C6BF2EC398591E32 /* DocumentOrienter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9247126681A6C6C72073CE9 /* DocumentOrienter.swift */; };
 		9678B3332194427C7E726A1D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7FE209DF082AD4EA8A4F18 /* SettingsView.swift */; };
 		9A345462A6F3AAC5FE3FDB82 /* PhotoLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84A99719D466ADC98078D64D /* PhotoLoader.swift */; };
 		BF4B3B7BCC4BE7C978DA051F /* DocumentDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCE402D65CB38A6705D5A868 /* DocumentDetector.swift */; };
@@ -24,6 +26,7 @@
 		E635A4E91576D0D178E8ADF7 /* DocumentCropCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B3DB7706F916C0592708B51D /* DocumentCropCore.framework */; };
 		EC80F17621FF164C5C08B2CF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4DAB6C28368B6EFFAE9941 /* AppStore.swift */; };
 		EFDD7A3AB1C593A29CB85B76 /* DocumentCropper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68F823B1592B02B6FB40E69B /* DocumentCropper.swift */; };
+		F760AE789E9068EC329A92A5 /* DocumentPDFBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB174B0DA79AD4A3DBD7043 /* DocumentPDFBuilder.swift */; };
 		FF49D7AA282472632CE68186 /* OriginalPhotoFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EF7DF2E2289C3925951C9C6 /* OriginalPhotoFile.swift */; };
 /* End PBXBuildFile section */
 
@@ -53,7 +56,8 @@
 
 /* Begin PBXFileReference section */
 		09E2686E68C7B9E8A327907F /* CropLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CropLogger.swift; sourceTree = "<group>"; };
-		15D651C6A1ADBDD45BC9F85C /* Margin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Margin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0BB174B0DA79AD4A3DBD7043 /* DocumentPDFBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPDFBuilder.swift; sourceTree = "<group>"; };
+		15D651C6A1ADBDD45BC9F85C /* Margin.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Margin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5EF7DF2E2289C3925951C9C6 /* OriginalPhotoFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OriginalPhotoFile.swift; sourceTree = "<group>"; };
 		68F823B1592B02B6FB40E69B /* DocumentCropper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentCropper.swift; sourceTree = "<group>"; };
 		71F9013379E4311B028F3150 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -61,10 +65,12 @@
 		84A99719D466ADC98078D64D /* PhotoLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLoader.swift; sourceTree = "<group>"; };
 		8B4DAB6C28368B6EFFAE9941 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		935EE552AF2F04F7CA94BCA9 /* CameraPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPicker.swift; sourceTree = "<group>"; };
+		A1A3416965A207F68BC132BC /* DocumentImageIO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentImageIO.swift; sourceTree = "<group>"; };
 		A3F38A539D615B0491B5830A /* DocumentWarper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentWarper.swift; sourceTree = "<group>"; };
 		AA7FE209DF082AD4EA8A4F18 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		ABE43E0516B0B3E8B00C9BEE /* ShareableImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareableImage.swift; sourceTree = "<group>"; };
 		B3DB7706F916C0592708B51D /* DocumentCropCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = DocumentCropCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		B9247126681A6C6C72073CE9 /* DocumentOrienter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentOrienter.swift; sourceTree = "<group>"; };
 		C7942530B524307192EED9B2 /* MarginApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarginApp.swift; sourceTree = "<group>"; };
 		CCE402D65CB38A6705D5A868 /* DocumentDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentDetector.swift; sourceTree = "<group>"; };
 		E2D687C315CFA6D268DD3DD0 /* DocumentEnhancer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentEnhancer.swift; sourceTree = "<group>"; };
@@ -100,6 +106,9 @@
 				68F823B1592B02B6FB40E69B /* DocumentCropper.swift */,
 				CCE402D65CB38A6705D5A868 /* DocumentDetector.swift */,
 				E2D687C315CFA6D268DD3DD0 /* DocumentEnhancer.swift */,
+				A1A3416965A207F68BC132BC /* DocumentImageIO.swift */,
+				B9247126681A6C6C72073CE9 /* DocumentOrienter.swift */,
+				0BB174B0DA79AD4A3DBD7043 /* DocumentPDFBuilder.swift */,
 				F01E7093540861ECAC864072 /* DocumentTrimmer.swift */,
 				A3F38A539D615B0491B5830A /* DocumentWarper.swift */,
 				71F9013379E4311B028F3150 /* Models.swift */,
@@ -197,6 +206,8 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = 01711C74349C980C1C588C61 /* Build configuration list for PBXProject "Margin" */;
 			developmentRegion = en;
@@ -253,6 +264,9 @@
 				EFDD7A3AB1C593A29CB85B76 /* DocumentCropper.swift in Sources */,
 				BF4B3B7BCC4BE7C978DA051F /* DocumentDetector.swift in Sources */,
 				5387783F7AEE6604CB7D3ED0 /* DocumentEnhancer.swift in Sources */,
+				83AB3EA16036E899258E42CB /* DocumentImageIO.swift in Sources */,
+				8F2B16A4C6BF2EC398591E32 /* DocumentOrienter.swift in Sources */,
+				F760AE789E9068EC329A92A5 /* DocumentPDFBuilder.swift in Sources */,
 				4B5C8F7991244861E5BF0B84 /* DocumentTrimmer.swift in Sources */,
 				7F40FF4E03CE6C572B898A30 /* DocumentWarper.swift in Sources */,
 				675AB2BD2472C1F16FD187A7 /* Models.swift in Sources */,
@@ -400,7 +414,6 @@
 				ASSETCATALOG_COMPILER_GLOBALACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = X783CXDH68;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Margin;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Margin uses the camera to photograph receipts and product boxes.";
@@ -413,7 +426,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nathany.Margin;
+				PRODUCT_BUNDLE_IDENTIFIER = com.snathany.Margin;
 				PRODUCT_NAME = Margin;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -451,7 +464,6 @@
 				ASSETCATALOG_COMPILER_GLOBALACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = X783CXDH68;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Margin;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Margin uses the camera to photograph receipts and product boxes.";
@@ -464,7 +476,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nathany.Margin;
+				PRODUCT_BUNDLE_IDENTIFIER = com.snathany.Margin;
 				PRODUCT_NAME = Margin;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
