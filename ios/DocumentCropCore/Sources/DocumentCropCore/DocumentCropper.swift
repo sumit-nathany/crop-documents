@@ -95,6 +95,55 @@ public enum DocumentCropper {
         return CropResult(image: warped, confidence: detection.confidence, quad: expanded)
     }
 
+    /// Outcome of cropping one file on disk.
+    public struct FileOutcome: Sendable {
+        public let source: URL
+        public let output: URL
+        public let confidence: Float
+        public let pixelSize: CGSize
+    }
+
+    /// Crop one file on disk and write the result — port of `processor.process_image`.
+    ///
+    /// Lives in the core rather than the CLI so every Apple front end (CLI today, a Mac
+    /// GUI later) gets identical load → detect → warp → align → enhance → save behavior.
+    /// Throws `CropError.noDocumentDetected` when the image should be skipped, which the
+    /// caller is expected to catch and log rather than treat as fatal.
+    @available(iOS 17.0, macOS 13.0, *)
+    @discardableResult
+    public static func cropFile(
+        at sourceURL: URL,
+        outputDirectory: URL,
+        settings: CropSettings = .init(),
+        jpegQuality: Double = 0.95,
+        policy: DetectionPolicy = .platformDefault
+    ) throws -> FileOutcome {
+        let loaded = try DocumentImageIO.load(contentsOf: sourceURL)
+
+        // Hand Vision the original container bytes too — HEIC detects better undecoded.
+        let detection = try DocumentDetector.detectForCrop(
+            upright: loaded.cgImage,
+            originalData: loaded.data,
+            policy: policy
+        )
+        CropLogger.shared.info("Detection method: \(detection.method)")
+
+        let result = try crop(cgImage: loaded.cgImage, detection: detection, settings: settings)
+
+        try FileManager.default.createDirectory(
+            at: outputDirectory, withIntermediateDirectories: true
+        )
+        let outputURL = DocumentImageIO.outputURL(for: sourceURL, in: outputDirectory)
+        try DocumentImageIO.save(result.image, to: outputURL, jpegQuality: jpegQuality)
+
+        return FileOutcome(
+            source: sourceURL,
+            output: outputURL,
+            confidence: result.confidence,
+            pixelSize: CGSize(width: result.image.width, height: result.image.height)
+        )
+    }
+
     /// Keystone refine — port of `processor.refine_corners`.
     public static func refineCorners(_ quad: DocumentQuad, imageHeight: CGFloat) -> DocumentQuad {
         var tl = quad.topLeft

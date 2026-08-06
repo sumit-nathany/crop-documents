@@ -118,6 +118,59 @@ public enum CropConstants {
     public static let deskewBorderExtraPercent: Double = 4.0
 }
 
+/// How aggressively to reject a Vision detection that covers too little of the frame.
+///
+/// This is genuinely platform-dependent policy, not an algorithm difference, so the core
+/// exposes it rather than hardcoding one platform's tuning:
+///
+/// - **iOS** photos come straight from the camera, framed by someone pointing at a
+///   document. A detection covering a third of the frame is far more likely to be a
+///   sub-region (a barcode sticker, a bottom strip) than the real page, and accepting
+///   one produces a badly wrong crop. Hence the strict floor.
+/// - **Mac** inputs are curated files the user deliberately pointed the CLI at, often
+///   already-cropped or scanned, and a document legitimately occupying ~34% of a tall
+///   phone photo is normal. The Python CLI applied no floor at all and was right not to;
+///   a strict floor here silently skips images that previously worked.
+public struct DetectionPolicy: Sendable, Equatable {
+    /// Minimum fraction of the frame a detection must cover to be accepted.
+    public var minAreaFraction: Double
+    /// Above this fraction, a detection needs `highAreaMinConfidence` to be trusted.
+    public var maxAreaFraction: Double
+    /// Reject anything below this confidence outright.
+    public var minConfidence: Float
+    /// Confidence required when the detection covers more than `maxAreaFraction`.
+    public var highAreaMinConfidence: Float
+    /// Confidence required when the detection is essentially the whole frame.
+    public var fullFrameMinConfidence: Float
+
+    public init(
+        minAreaFraction: Double,
+        maxAreaFraction: Double = 0.94,
+        minConfidence: Float = 0.12,
+        highAreaMinConfidence: Float = 0.50,
+        fullFrameMinConfidence: Float = 0.55
+    ) {
+        self.minAreaFraction = minAreaFraction
+        self.maxAreaFraction = maxAreaFraction
+        self.minConfidence = minConfidence
+        self.highAreaMinConfidence = highAreaMinConfidence
+        self.fullFrameMinConfidence = fullFrameMinConfidence
+    }
+
+    /// Camera-roll default: strict area floor to reject sub-region latches.
+    public static let strict = DetectionPolicy(minAreaFraction: 0.35)
+
+    /// Curated-file default: trust Vision's confidence and keep only a degenerate-quad
+    /// guard, matching the Python CLI's behaviour.
+    public static let lenient = DetectionPolicy(minAreaFraction: 0.10)
+
+    #if canImport(UIKit)
+    public static let platformDefault = strict
+    #else
+    public static let platformDefault = lenient
+    #endif
+}
+
 public struct CropSettings: Sendable, Equatable {
     /// Organic border beyond the detected edge (matches CLI `expansion_pct`).
     public var expansionPercent: Double

@@ -21,7 +21,11 @@ public enum DocumentDetector {
     /// Detect on the upright bitmap used for warp. Tries several strategies and picks the best.
     /// Available on both platforms — only the JPEG-re-encode last-resort branch needs UIKit, and
     /// that's gated internally so this function itself has no platform-specific dependency.
-    public static func detectForCrop(upright: CGImage, originalData: Data? = nil) throws -> Detection {
+    public static func detectForCrop(
+        upright: CGImage,
+        originalData: Data? = nil,
+        policy: DetectionPolicy = .platformDefault
+    ) throws -> Detection {
         let targetW = upright.width
         let targetH = upright.height
         CropLogger.shared.info("Detect for crop \(targetW)×\(targetH)px")
@@ -29,10 +33,10 @@ public enum DocumentDetector {
         var candidates: [Detection] = []
 
         if let data = originalData, !data.isEmpty {
-            if let d = detectFromOriginalFile(data: data, targetWidth: targetW, targetHeight: targetH) {
+            if let d = detectFromOriginalFile(data: data, targetWidth: targetW, targetHeight: targetH, policy: policy) {
                 candidates.append(d)
             }
-            if let d = detectFromImageSource(data: data, targetWidth: targetW, targetHeight: targetH) {
+            if let d = detectFromImageSource(data: data, targetWidth: targetW, targetHeight: targetH, policy: policy) {
                 candidates.append(d)
             }
         }
@@ -43,14 +47,18 @@ public enum DocumentDetector {
             detectHeight: targetH,
             targetWidth: targetW,
             targetHeight: targetH,
-            method: "upright ci"
+            method: "upright ci",
+            policy: policy
         ) {
             candidates.append(d)
         }
 
         // Last resort — can mis-detect partial regions on iPhone HEIC; only if nothing else passes.
         if candidates.isEmpty, let jpeg = jpegReencode(upright, quality: 0.98),
-           let d = detectFromOriginalFile(data: jpeg, targetWidth: targetW, targetHeight: targetH, method: "jpeg re-encode") {
+           let d = detectFromOriginalFile(
+               data: jpeg, targetWidth: targetW, targetHeight: targetH,
+               method: "jpeg re-encode", policy: policy
+           ) {
             candidates.append(d)
         }
 
@@ -66,14 +74,16 @@ public enum DocumentDetector {
         if let rect = detectLargestRectangle(
             ciImage: CIImage(cgImage: upright),
             targetWidth: targetW,
-            targetHeight: targetH
+            targetHeight: targetH,
+            policy: policy
         ) {
             // Refine rectangle quad with doc-seg on the cropped region (Mac-style perspective).
             if let refined = refineDocSegInRegion(
                 ciImage: CIImage(cgImage: upright),
                 regionQuad: rect.quad,
                 targetWidth: targetW,
-                targetHeight: targetH
+                targetHeight: targetH,
+                policy: policy
             ) {
                 CropLogger.shared.info(
                     String(format: "Picked [%@] confidence=%.3f area=%.0f%%", refined.method, refined.confidence, refined.areaFraction * 100)
@@ -105,16 +115,23 @@ public enum DocumentDetector {
     }
 
     #if canImport(UIKit)
-    public static func detect(in image: UIImage, imageData: Data? = nil) throws -> Detection {
+    public static func detect(
+        in image: UIImage,
+        imageData: Data? = nil,
+        policy: DetectionPolicy = .platformDefault
+    ) throws -> Detection {
         guard let upright = image.normalizedUpCGImage() else {
             throw CropError.imageLoadFailed
         }
-        return try detectForCrop(upright: upright, originalData: imageData)
+        return try detectForCrop(upright: upright, originalData: imageData, policy: policy)
     }
     #endif
 
-    public static func detect(in cgImage: CGImage) throws -> Detection {
-        try detectForCrop(upright: cgImage)
+    public static func detect(
+        in cgImage: CGImage,
+        policy: DetectionPolicy = .platformDefault
+    ) throws -> Detection {
+        try detectForCrop(upright: cgImage, policy: policy)
     }
 
     // MARK: - Strategies
@@ -123,7 +140,8 @@ public enum DocumentDetector {
         data: Data,
         targetWidth: Int,
         targetHeight: Int,
-        method: String? = nil
+        method: String? = nil,
+        policy: DetectionPolicy
     ) -> Detection? {
         let ext = sniffExtension(data)
         let url = FileManager.default.temporaryDirectory
@@ -144,11 +162,17 @@ public enum DocumentDetector {
             detectHeight: Int(extent.height),
             targetWidth: targetWidth,
             targetHeight: targetHeight,
-            method: label
+            method: label,
+            policy: policy
         )
     }
 
-    private static func detectFromImageSource(data: Data, targetWidth: Int, targetHeight: Int) -> Detection? {
+    private static func detectFromImageSource(
+        data: Data,
+        targetWidth: Int,
+        targetHeight: Int,
+        policy: DetectionPolicy
+    ) -> Detection? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let cg = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else { return nil }
@@ -169,7 +193,8 @@ public enum DocumentDetector {
             detectHeight: Int(extent.height),
             targetWidth: targetWidth,
             targetHeight: targetHeight,
-            method: "image source"
+            method: "image source",
+            policy: policy
         )
     }
 
@@ -179,7 +204,8 @@ public enum DocumentDetector {
         detectHeight: Int,
         targetWidth: Int,
         targetHeight: Int,
-        method: String
+        method: String,
+        policy: DetectionPolicy
     ) -> Detection? {
         guard let raw = runDocumentSegmentation(
             ciImage: ciImage, pixelWidth: detectWidth, pixelHeight: detectHeight, method: method
@@ -194,7 +220,7 @@ public enum DocumentDetector {
         )
         let imageSize = CGSize(width: targetWidth, height: targetHeight)
         let area = mapped.areaFraction(in: imageSize)
-        guard isAcceptable(confidence: raw.confidence, area: area, quad: mapped, imageSize: imageSize) else {
+        guard isAcceptable(confidence: raw.confidence, area: area, quad: mapped, imageSize: imageSize, policy: policy) else {
             CropLogger.shared.info(
                 String(format: "Rejected [%@] confidence=%.3f area=%.0f%%", method, raw.confidence, area * 100)
             )
@@ -233,23 +259,20 @@ public enum DocumentDetector {
 
     // MARK: - Scoring
 
-    /// Typical phone photo of a document: roughly 35–92% of the frame.
-    private static let minAreaFraction = 0.35
-    private static let maxAreaFraction = 0.94
-
     private static func isAcceptable(
         confidence: Float,
         area: Double,
         quad: DocumentQuad,
-        imageSize: CGSize
+        imageSize: CGSize,
+        policy: DetectionPolicy
     ) -> Bool {
         guard quad.isValid(in: imageSize) else { return false }
-        if confidence < 0.12 { return false }
-        if area < minAreaFraction {
+        if confidence < policy.minConfidence { return false }
+        if area < policy.minAreaFraction {
             return false  // e.g. 25% bottom strip — would crop away most of the doc
         }
-        if area > maxAreaFraction && confidence < 0.50 { return false }
-        if quad.isFullFrame(in: imageSize) && confidence < 0.55 { return false }
+        if area > policy.maxAreaFraction && confidence < policy.highAreaMinConfidence { return false }
+        if quad.isFullFrame(in: imageSize) && confidence < policy.fullFrameMinConfidence { return false }
         return true
     }
 
@@ -311,7 +334,8 @@ public enum DocumentDetector {
     private static func detectLargestRectangle(
         ciImage: CIImage,
         targetWidth: Int,
-        targetHeight: Int
+        targetHeight: Int,
+        policy: DetectionPolicy
     ) -> Detection? {
         let request = VNDetectRectanglesRequest()
         request.minimumAspectRatio = 0.15
@@ -343,7 +367,7 @@ public enum DocumentDetector {
             CropLogger.shared.info(
                 String(format: "Rectangle candidate confidence=%.3f area=%.0f%%", obs.confidence, area * 100)
             )
-            guard isAcceptable(confidence: obs.confidence, area: area, quad: quad, imageSize: imageSize) else {
+            guard isAcceptable(confidence: obs.confidence, area: area, quad: quad, imageSize: imageSize, policy: policy) else {
                 continue
             }
             let det = Detection(quad: quad, confidence: obs.confidence, method: "rectangle", areaFraction: area)
@@ -361,7 +385,8 @@ public enum DocumentDetector {
         ciImage: CIImage,
         regionQuad: DocumentQuad,
         targetWidth: Int,
-        targetHeight: Int
+        targetHeight: Int,
+        policy: DetectionPolicy
     ) -> Detection? {
         let imageSize = CGSize(width: targetWidth, height: targetHeight)
         let xs = regionQuad.points.map(\.x)
@@ -406,7 +431,7 @@ public enum DocumentDetector {
             bottomLeft: mapPoint(raw.quad.bottomLeft)
         )
         let area = mapped.areaFraction(in: imageSize)
-        guard isAcceptable(confidence: raw.confidence, area: area, quad: mapped, imageSize: imageSize) else {
+        guard isAcceptable(confidence: raw.confidence, area: area, quad: mapped, imageSize: imageSize, policy: policy) else {
             CropLogger.shared.info(
                 String(format: "Rejected [region refine] confidence=%.3f area=%.0f%%", raw.confidence, area * 100)
             )

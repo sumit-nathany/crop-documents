@@ -161,8 +161,8 @@ public enum DocumentTrimmer {
         }
 
         let main = substantial.max(by: { ($0[1] - $0[0]) < ($1[1] - $1[0]) })!
-        var yTop = main[0]
-        var yBot = main[1]
+        let yTop = main[0]
+        let yBot = main[1]
 
         var xLeft = 0
         var xRight = w - 1
