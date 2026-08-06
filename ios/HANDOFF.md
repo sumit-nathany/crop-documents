@@ -544,3 +544,34 @@ missed something that only shows up running the full app on real hardware).
 **Not yet done**: auto-rotate (Vision-based) deprioritized — it depends on the same deskew stack
 being trusted, so no point building on top of it yet. Mac CLI Swift executable / Python retirement
 still not started, per the user's original fix-first sequencing choice.
+
+---
+
+## Epilogue — 2026-08-07
+
+**This document is now history.** It records the debugging of an iOS port that no longer
+exists as a port: `DocumentCropCore` is the single implementation and the Mac CLI is a front
+end over it, so the "iOS behaves worse than Mac" framing throughout no longer applies. The
+Python pipeline it repeatedly refers to as the reference (`processor.py`, `batch.py`,
+`detector/detect`, `enhancer/enhance`) was deleted after the Swift engine matched it.
+
+Read the rest of this file as a record of what went wrong and why, not as instructions.
+Current state lives in `/CLAUDE.md`.
+
+What closed since the last section above:
+
+- **Mac CLI + Python retirement** — done. See `/README.md`.
+- **Auto-rotate** — ported to Vision (`DocumentOrienter`), but narrower than the Tesseract
+  OSD it replaced: it straightens a sideways page and deliberately refuses to flip 180°,
+  because Vision reads upside-down text nearly as well as upright (measured: the 180°
+  partner scores within ~1%, sometimes higher). Off by default.
+- **Deskew/trim** — the flap-trim gap against Python closed after fixing two real bugs in
+  `cannyLite` (hysteresis thresholds read as a band; missing non-maximum suppression) and
+  raising `DocumentTrimmer.analysisMaxSide` from 1200 to 1600. Both lab cases now trim as
+  Python did.
+
+**Still open, and still the caution this document was right about:** all of the above is
+verified on Mac against `lab/cases/`. None of it has been re-verified on a real device.
+`straighten` remains off by default and hidden in the iOS UI for exactly the reason stated
+above — offline verification has twice passed while the on-device result did not. Establish
+an on-device loop before re-enabling it.
