@@ -172,10 +172,19 @@ crop-documents/
 ├── setup.sh           # Automatic compile and environment bootstrap script
 ├── requirements.txt   # Python dependency list
 ├── lab/               # Deskew/rotation regression cases + runner
+├── ios/               # Margin iPhone app (SwiftUI + DocumentCropCore)
 ├── CLAUDE.md          # Agent context (Claude Code)
 ├── .cursor/rules/     # Agent context (Cursor)
 └── README.md          # Project documentation
 ```
+
+### iPhone app (Margin)
+
+```bash
+cd ios && xcodegen generate && open Margin.xcodeproj
+```
+
+Pick or capture photos → crop → save to Photos. See [ios/README.md](ios/README.md).
 
 ### Pipeline lab (deskew / rotation)
 

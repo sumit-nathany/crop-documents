@@ -37,9 +37,10 @@ Vision coords: normalized, origin bottom-left, order TL,TR,BR,BL. Python flips Y
 ## Product / agent priorities
 
 1. **Keep fixing deskew & rotation in Python** (`processor.deskew_image`, `auto_rotate_image`) using `lab/`.
-2. **iPhone app is the ship target** (native Swift later). Mac GUI deferred.
-3. Do **not** port the CV pipeline to Swift or scaffold Xcode apps until the user asks and CLI quality is good enough.
-4. Prefer small, flag-compatible changes; soft-skip when Tesseract is absent.
+2. **iPhone app (`ios/Margin`)** — phone crop UI. Open `ios/Margin.xcodeproj`.
+3. Mac GUI deferred.
+4. Prefer small, flag-compatible CLI changes; soft-skip when Tesseract is absent.
+5. Port stable crop behavior into `ios/DocumentCropCore`; keep risky flap-trim experiments in Python until trusted.
 
 ## Known soft spots
 

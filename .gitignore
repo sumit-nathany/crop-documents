@@ -9,3 +9,10 @@ enhancer/enhance
 lab/cases/*
 !lab/cases/.gitkeep
 lab/out/
+
+# iOS / Xcode
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/*.xcworkspace/xcuserdata/
+*.xcuserstate
+ios/**/.build/

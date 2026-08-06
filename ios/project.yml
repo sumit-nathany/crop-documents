@@ -1,0 +1,50 @@
+name: Margin
+options:
+  bundleIdPrefix: com.snathany
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+settings:
+  BASE_SDK: iphoneos
+  SWIFT_VERSION: "5.0"
+  TARGETED_DEVICE_FAMILY: "1"
+  IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+packages: {}
+targets:
+  DocumentCropCore:
+    type: framework
+    platform: iOS
+    sources:
+      - path: DocumentCropCore/Sources/DocumentCropCore
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.snathany.DocumentCropCore
+      GENERATE_INFOPLIST_FILE: YES
+      MARKETING_VERSION: "1.0"
+      CURRENT_PROJECT_VERSION: "1"
+  Margin:
+    type: application
+    platform: iOS
+    sources:
+      - path: Margin
+        excludes:
+          - "**/*.md"
+    dependencies:
+      - target: DocumentCropCore
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.snathany.Margin
+      PRODUCT_NAME: Margin
+      TARGETED_DEVICE_FAMILY: "1"
+      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_CFBundleDisplayName: Margin
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+      INFOPLIST_KEY_NSCameraUsageDescription: Margin uses the camera to photograph receipts and product boxes.
+      INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Margin needs your photo library to pick documents to crop.
+      INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: Margin saves cropped documents back to your photo library.
+      MARKETING_VERSION: "1.0"
+      CURRENT_PROJECT_VERSION: "1"
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      ASSETCATALOG_COMPILER_GLOBALACCENT_COLOR_NAME: AccentColor
+    scheme:
+      testTargets: []
