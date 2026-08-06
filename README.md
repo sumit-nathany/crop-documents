@@ -96,9 +96,9 @@ You can output crops directly into a single PDF, or compile pre-cropped images:
 
 **Bundling images that are already cropped:**
 ```bash
-# Point at the folder with --expansion 0 to pass them through, or use the
-# legacy standalone builder:
-python3 pdf_builder.py ./cropped_results/ --output ~/Desktop/monthly_report.pdf
+# --expansion 0 crops tight to the detected edges, so already-cropped images
+# pass through essentially unchanged.
+./crop-documents --input ./cropped_results/ --expansion 0 --pdf monthly_report.pdf
 ```
 
 ### 5. Alignment (`--deskew`)
@@ -159,9 +159,8 @@ Applies Apple's native CoreImage `autoAdjustmentFilters` (the exact same engine 
 
 ## Configuration
 
-The Swift CLI takes its settings from flags, with the same defaults `config.yaml`
-documented (`--expansion 4`, deskew/rotate/enhance all off). `config.yaml` is still
-read by the legacy Python pipeline in `lab/`.
+Settings come from flags. Defaults: `--expansion 4`, `--jpeg-quality 0.95`, and
+deskew / rotate / enhance all off.
 
 ```bash
 ./crop-documents --expansion 6 --jpeg-quality 0.9 --input ./photos/
@@ -181,28 +180,23 @@ crop-documents/
 │   │   └── Tests/                      #   swift test
 │   ├── Margin/                         # iPhone front end (SwiftUI)
 │   └── Margin.xcodeproj                # Generated — re-run xcodegen after adding files
-├── lab/                                # Deskew/rotation regression harness (Python)
-├── legacy Python CLI ────────────────  # Reference implementation, still runnable
-│   ├── batch.py  processor.py  pdf_builder.py
-│   ├── detector/detect.swift  enhancer/enhance.swift
-│   ├── config.yaml  setup.sh  requirements.txt
+├── lab/                                # Regression cases + variant runner
 ├── CLAUDE.md                           # Agent context (Claude Code)
 ├── .cursor/rules/                      # Agent context (Cursor)
 └── README.md
 ```
 
-### Why the Python CLI is still here
+### The Python pipeline this replaced
 
-The Swift CLI reproduces the default crop path exactly — same detections, same
-output dimensions, same confidences, with pixel differences only at high-gradient
-edges (Lanczos vs CoreImage resampling).
+Earlier versions ran on Python + OpenCV + Tesseract, with a Swift binary shelled out
+to for Vision. That is gone as of 2026-08-07: the Swift engine reproduces it on both
+the default crop path (identical dimensions and confidences) and `--deskew` (both lab
+cases trim identically; residual skew is comparable or better).
 
-`--deskew` is not yet at full parity. On the lab set, one image matches Python
-exactly and the other keeps a flap that Python trims. Swift errs conservative
-there, which is the safe direction, but it is a real gap — and `processor.py` is
-the only ground truth for closing it. Keeping deskew development in Python against
-`lab/` is the project's stated priority, so the reference implementation stays
-until the port is verified.
+`lab/python-reference-baseline.json` records the dimensions the Python pipeline
+produced on the lab cases, so the historical reference survives its deletion. If a
+future change moves those numbers substantially, that is worth understanding rather
+than silently re-baselining.
 
 ### iPhone app (Margin)
 
@@ -217,8 +211,8 @@ Pick or capture photos → crop → save to Photos. See [ios/README.md](ios/READ
 Drop hard photos into `lab/cases/`, then:
 
 ```bash
-python3 lab/run_regression.py
-python3 lab/run_regression.py --variants crop,deskew
+./lab/run_regression.sh
+./lab/run_regression.sh --variants crop,deskew
 ```
 
 CLI:

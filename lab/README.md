@@ -1,14 +1,17 @@
 # Pipeline lab (deskew / rotation)
 
-Use this folder to iterate on **alignment** and **auto-rotate**. The Mac Python CLI remains the source of truth.
+Use this folder to iterate on **alignment** and **auto-rotate** against real photos.
+Everything here drives the Swift CLI, so the harness exercises the same engine the
+iPhone app ships.
 
 ## Layout
 
 ```
 lab/
-├── cases/          # Drop hard photos here (HEIC/JPEG/PNG). Not committed by default.
-├── out/            # Regression outputs (gitignored)
-├── run_regression.py
+├── cases/                          # Drop hard photos here (HEIC/JPEG/PNG). Not committed.
+├── out/                            # Regression outputs (gitignored)
+├── run_regression.sh
+├── python-reference-baseline.json  # What the retired Python pipeline produced
 └── README.md
 ```
 
@@ -16,30 +19,47 @@ lab/
 
 Copy failing or borderline shots into `lab/cases/`. Prefer a mix of:
 
-- Sideways / upside-down pages (`--rotate`)
+- Sideways pages (`--rotate`)
 - Slight tilt / keystone after a good crop (`--deskew`)
 - Open flaps, stray paper, colored box edges
 - Sparse receipts, dark tables, hands in frame
 
 ## Run
 
-From the repo root (requires `./setup.sh` already done):
+From the repo root (requires `./build-cli.sh` already done):
 
 ```bash
-python3 lab/run_regression.py
+./lab/run_regression.sh
 
 # Subset
-python3 lab/run_regression.py --variants crop,deskew
+./lab/run_regression.sh --variants crop,deskew
 
 # Custom expansion
-python3 lab/run_regression.py --expansion 4.0
+./lab/run_regression.sh --expansion 6
 ```
 
-CLI equivalent:
+Single image, ad hoc:
 
 ```bash
-python3 batch.py --input lab/cases/ --output lab/out/manual/ --deskew
+./crop-documents --input lab/cases/ --output lab/out/manual/ --deskew --verbose
 ```
+
+## Diagnosing a stage
+
+Each probe reports what the engine decided and changes nothing:
+
+```bash
+./crop-documents probe-trim        lab/cases/foo.jpg   # rows, runs, merge, main block
+./crop-documents probe-skew        lab/cases/foo.jpg   # raw deskew angle estimate
+./crop-documents probe-orientation lab/cases/foo.jpg   # per-orientation text scores
+```
+
+## Judging a change
+
+Compare **output dimensions** and **residual skew**, not per-pixel deltas. A 0.6° deskew
+changes a textured photo by mean|Δ|≈13 on its own, so pixel metrics drown in texture and
+will tell you two good results are wildly different. To measure residual skew, run
+`probe-skew` on the *output* — closer to zero is straighter.
 
 ## Flags (keep it simple)
 
@@ -47,13 +67,16 @@ python3 batch.py --input lab/cases/ --output lab/out/manual/ --deskew
 |------|---------|
 | *(none)* | Crop only |
 | `--deskew` | Align: keystone, micro-rotation, top/bottom flap trim |
-| `--rotate` | Fix 90°/180°/270° (needs Tesseract) |
+| `--rotate` | Straighten a sideways page (never flips 180° — see `DocumentOrienter`) |
 
 ## What to fix where
 
+All paths are under `ios/DocumentCropCore/Sources/DocumentCropCore/`.
+
 | Symptom | Likely code |
 |---------|-------------|
-| Crop box wrong / no doc | `detector/detect.swift` |
-| Tight/loose margin | `expand_quad` / `--expansion` |
-| Residual tilt / keystone / flaps | `--deskew` path in `processor.py` |
-| Wrong 90/180/270 | `auto_rotate_image` (needs Tesseract) |
+| Crop box wrong / no doc found | `DocumentDetector` (and `DetectionPolicy` thresholds) |
+| Tight/loose margin | `DocumentQuad.expanded` / `--expansion` |
+| Residual tilt | `DocumentWarper.estimateSkewDegrees` |
+| Flap kept or page over-trimmed | `DocumentTrimmer` (`cannyLite`, `analysisMaxSide`) |
+| Sideways page not straightened | `DocumentOrienter` |

@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 /// Four corners in **pixel** space, UIKit top-left origin.
-/// Order matches the Python/Vision convention: TL → TR → BR → BL.
+/// Order matches Vision's convention: TL → TR → BR → BL.
 public struct DocumentQuad: Sendable, Equatable {
     public var topLeft: CGPoint
     public var topRight: CGPoint
@@ -114,7 +114,8 @@ public struct DocumentQuad: Sendable, Equatable {
 }
 
 public enum CropConstants {
-    /// Extra border when straighten/deskew is on — matches `processor.DESKEW_BORDER_EXTRA_PCT`.
+    /// Extra border when straighten/deskew is on, giving the later flap trim headroom so it
+    /// doesn't snug against ink.
     public static let deskewBorderExtraPercent: Double = 4.0
 }
 
@@ -172,17 +173,17 @@ public struct DetectionPolicy: Sendable, Equatable {
 }
 
 public struct CropSettings: Sendable, Equatable {
-    /// Organic border beyond the detected edge (matches CLI `expansion_pct`).
+    /// Organic border beyond the detected edge (CLI `--expansion`).
     public var expansionPercent: Double
     /// When true, run the conservative `--deskew` stack (refine, wider border, deskew, flap trim).
     /// Defaults off: the deskew angle estimate is not yet trusted on real device photos (see
     /// ios/HANDOFF.md Round 3/4) — the UI hides this toggle for now until it's re-verified. Also
-    /// matches Python's `config.yaml` default (`deskew: false`), which Swift previously diverged from.
+    /// matched the retired Python CLI's default (`deskew: false`), which Swift once diverged from.
     public var straighten: Bool
     /// Apple Photos CoreImage auto-enhance (matches CLI `--enhance`).
     public var enhance: Bool
     /// Correct 90°/180°/270° orientation via Vision text recognition (matches CLI `--rotate`).
-    /// Off by default, like Python's `config.yaml` — a wrong quarter turn is very visible,
+    /// Off by default, as it was in the Python CLI — a wrong quarter turn is very visible,
     /// so this stays opt-in.
     public var autoRotate: Bool
 

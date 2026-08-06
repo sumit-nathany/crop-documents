@@ -16,8 +16,7 @@ an **iPhone app** — over one shared Swift engine built on Apple Vision + CoreI
 | `ios/DocumentCropCore/Sources/DocumentCropCore` | **The engine.** Detect, warp, deskew, trim, orient, enhance, image IO, PDF |
 | `ios/DocumentCropCore/Sources/CropDocumentsCLI` | Mac front end: arg parsing, file walk, console output |
 | `ios/Margin` | iPhone SwiftUI front end (pick / camera → crop → Photos) |
-| `lab/` | Deskew/rotate regression harness (Python) |
-| `processor.py`, `batch.py`, `pdf_builder.py`, `detector/`, `enhancer/` | Legacy Python CLI — reference implementation, still runnable |
+| `lab/` | Regression cases + variant runner (`run_regression.sh`) |
 
 ## Pipeline
 
@@ -38,17 +37,22 @@ load → Vision detect → expand quad → warp → optional `--deskew` (align +
 - **Platform-specific tuning belongs in a policy type, not in shared code.** See
   `DetectionPolicy` — iOS needs a strict area floor to reject sub-region latches on camera
   photos; Mac needs a lenient one to match Python on curated files.
-- **Deskew is still under development in Python.** `processor.py` is the ground truth for
-  the unfinished trim port; validate with `lab/run_regression.py` before porting.
+- **The trim's edge detector is delicate** — `cannyLite` has broken twice (hysteresis read
+  as a band; missing non-maximum suppression), and `analysisMaxSide` below 1600 closes the
+  void between flap and page. Validate trim changes with `./lab/run_regression.sh` and the
+  `probe-trim` subcommand, not by eyeballing one image.
 - Keep the public CLI simple: **`--deskew`** (align) and **`--rotate`** (quarter turn) —
   not a matrix of experimental flags.
-- macOS 13+, Xcode CLT. Run `./build-cli.sh` to build the CLI.
+- macOS 13+, Xcode CLT. Run `./build-cli.sh` to build the CLI. No Python, OpenCV, or
+  Tesseract — the pipeline is Vision + CoreImage + CoreGraphics only.
 
 ## Current state
 
-- Default crop path: Swift CLI matches Python exactly (dimensions, confidences).
-- `--deskew`: **not at parity** — Swift is more conservative on flap trim. Last blocker
-  before retiring the Python pipeline.
+- The Python/OpenCV pipeline was removed on 2026-08-07 after the Swift engine matched it
+  on both the default crop path and `--deskew`. `lab/python-reference-baseline.json`
+  records the dimensions it produced.
 - `--rotate`: sideways pages only; deliberately does not flip 180° (Vision reads
   upside-down text nearly as well as upright — see `DocumentOrienter`).
 - `straighten` is off by default and hidden in the iOS UI pending on-device re-verification.
+- Diagnostics: `probe-trim`, `probe-skew`, `probe-orientation` report what each stage
+  decided without modifying anything.

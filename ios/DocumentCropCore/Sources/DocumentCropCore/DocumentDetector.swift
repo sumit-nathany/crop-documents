@@ -9,7 +9,8 @@ import Vision
 import UIKit
 #endif
 
-/// Wraps `VNDetectDocumentSegmentationRequest` — same detector as `detector/detect.swift`.
+/// Wraps `VNDetectDocumentSegmentationRequest` — the sole document detector for both
+/// front ends, replacing the standalone Swift binary the Python CLI used to shell out to.
 public enum DocumentDetector {
     public struct Detection: Sendable {
         public let quad: DocumentQuad

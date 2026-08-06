@@ -33,8 +33,7 @@ iPhone app ──┘                     → [deskew + trim] → [rotate] → [e
 | `ios/DocumentCropCore/Sources/DocumentCropCore/` | **The engine** (see below) |
 | `ios/DocumentCropCore/Sources/CropDocumentsCLI/` | Mac front end: args, file walk, console |
 | `ios/Margin/` | iPhone front end (SwiftUI) |
-| `lab/` | Deskew/rotate regression harness (Python) |
-| `processor.py`, `batch.py`, `pdf_builder.py`, `detector/`, `enhancer/` | Legacy Python CLI — reference implementation, see below |
+| `lab/` | Regression cases + variant runner (`run_regression.sh`) |
 
 Inside the engine:
 
@@ -68,18 +67,19 @@ to top-left pixel space at the boundary.
 
 ## Product / agent priorities
 
-1. **Close the `--deskew` parity gap** between `DocumentTrimmer` and `processor.trim_external_content`,
-   using `lab/`. This is the last thing blocking Python retirement.
-2. **Re-verify auto-rotate on device** before re-enabling it in the iOS UI.
-3. Mac GUI deferred.
-4. Prefer small, flag-compatible CLI changes.
+1. **Re-verify deskew + auto-rotate on a real device** before re-enabling the straighten
+   toggle in the iOS UI. Both are verified on Mac against the lab set; neither has held up
+   on-device yet, and that is the remaining unknown.
+2. Mac GUI deferred.
+3. Prefer small, flag-compatible CLI changes.
 
 ## Known soft spots
 
-- **`--deskew` trim is not at parity.** On the lab set, one image matches Python exactly;
-  the other keeps a flap Python trims. Swift errs conservative (safe direction). The
-  Canny hysteresis bug behind the *destructive* divergence is fixed; what remains is a
-  difference in the run-merging/threshold analysis.
+- **The trim's edge detector is delicate.** `cannyLite` has broken twice: once by treating
+  Canny's 50/150 hysteresis thresholds as a band (discarding strong edges), once by omitting
+  non-maximum suppression (edges too thick, inflating row density ~50% so flap and page
+  merged into one block). `DocumentTrimmerTests` pins both. `DocumentTrimmer.analysisMaxSide`
+  is likewise load-bearing — below 1600 the void between flap and page closes up.
 - **`straighten` is off by default and hidden in the iOS UI** — two rounds of
   "verified" fixes did not hold up on real device photos. See `ios/HANDOFF.md`.
 - **`--rotate` fixes sideways pages only, never 180°.** Vision reads upside-down text
@@ -88,26 +88,33 @@ to top-left pixel space at the boundary.
 - Residual perspective / cardboard bow on handheld box photos can't be removed by one
   plane warp.
 
-## Why the Python CLI still exists
+## The Python pipeline this replaced
 
-`processor.py` is the reference implementation and the only ground truth for the
-unfinished deskew port. The Swift CLI reproduces the **default crop path** exactly —
-same detections, dimensions, and confidences, with pixel differences only at
-high-gradient edges (Lanczos vs CoreImage resampling). It is not yet equivalent on
-`--deskew`. Retire the Python pipeline only after that gap closes.
+Removed 2026-08-07. It was Python + OpenCV + Tesseract with a shelled-out Swift Vision
+binary, and it was the reference the engine was validated against — default crop path
+(identical dimensions and confidences) and `--deskew` (both lab cases trim identically,
+residual skew comparable or better). `lab/python-reference-baseline.json` preserves the
+dimensions it produced. Treat a large drift from those numbers as a regression to explain,
+not to re-baseline.
 
 ## Regression
 
 Put hard photos in `lab/cases/` (gitignored images OK).
 
 ```bash
-python3 lab/run_regression.py                      # Python pipeline
+./lab/run_regression.sh                            # crop / deskew / rotate variants
 swift test --package-path ios/DocumentCropCore     # engine unit tests
-./crop-documents probe-orientation lab/cases/*.jpg # inspect rotate decisions
 ```
 
-To compare the two implementations on the same inputs, run `batch.py` and
-`./crop-documents` into separate output directories and diff dimensions first —
-geometry divergence matters, resampling noise doesn't.
+Diagnostic subcommands, for when a stage misbehaves — each reports what the engine
+decided without changing anything:
 
-See `lab/README.md`.
+```bash
+./crop-documents probe-trim        <image>   # row analysis: runs, merge, main block
+./crop-documents probe-skew        <image>   # raw deskew angle estimate
+./crop-documents probe-orientation <image>   # quarter-turn scores per orientation
+```
+
+When comparing outputs, diff **dimensions and residual skew**, not per-pixel deltas — a
+0.6° deskew changes an image by mean|Δ|≈13 on textured photos, so pixel metrics drown in
+texture. See `lab/README.md`.

@@ -2,7 +2,8 @@ import CoreGraphics
 import CoreImage
 import Foundation
 
-/// Native Apple Photos auto-enhance — port of `enhancer/enhance.swift`.
+/// Native Apple Photos auto-enhance. Runs in-process; the Python CLI shelled out to a
+/// separate compiled binary for this and silently no-op'd when it wasn't built.
 public enum DocumentEnhancer {
     private static let context = CIContext(options: [.useSoftwareRenderer: false])
 

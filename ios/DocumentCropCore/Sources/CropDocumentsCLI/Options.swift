@@ -1,8 +1,8 @@
 import DocumentCropCore
 import Foundation
 
-/// Parsed command line. Flag names and defaults mirror `batch.py` exactly so existing
-/// muscle memory and scripts keep working.
+/// Parsed command line. Flag names and defaults are inherited from the retired Python
+/// `batch.py` so existing muscle memory and scripts keep working.
 struct Options {
     var input: URL
     var output: URL?
@@ -28,7 +28,7 @@ struct Options {
     }
 
     /// Where the `--pdf` file should land. A bare name goes in the output directory (matching
-    /// `batch.py`); an absolute path is honoured as given.
+    /// the retired Python CLI); an absolute path is honoured as given.
     static func resolvePDFURL(_ argument: String, outputDirectory: URL) -> URL {
         argument.hasPrefix("/")
             ? URL(fileURLWithPath: argument)
@@ -90,7 +90,7 @@ extension Options {
       crop-documents --input ./photos/ --deskew --rotate --pdf receipts.pdf
     """
 
-    /// Parse `batch.py`-compatible arguments. Returns nil when `--help` was requested.
+    /// Parse the arguments. Returns nil when `--help` was requested.
     static func parse(_ args: [String]) throws -> Options? {
         var options = Options(input: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
         var index = 0

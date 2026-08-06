@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "Output dimensions the Python pipeline (processor.py + batch.py) produced on the",
+    "lab cases, recorded on 2026-08-07 immediately before that pipeline was deleted.",
+    "",
+    "This is the historical reference the Swift engine was validated against. Keep it as",
+    "a sanity check: if a future change to DocumentCropCore moves these numbers a lot,",
+    "that is worth understanding, not just re-baselining.",
+    "",
+    "'swift' records what the Swift CLI produced at the same commit. Where the two differ,",
+    "the difference was investigated and accepted — see the notes.",
+    "",
+    "Regenerate the Swift side with: ./lab/run_regression.sh --variants crop,deskew"
+  ],
+  "recorded": "2026-08-07",
+  "cases": [
+    {
+      "variant": "crop",
+      "image": "2021_Mi Security Camera 2 Box.jpg",
+      "python": [1392, 2969],
+      "swift": [1392, 2969],
+      "note": "exact"
+    },
+    {
+      "variant": "crop",
+      "image": "2022_Bosch_Bluetooth_Speaker.jpg",
+      "python": [3504, 991],
+      "swift": [3504, 991],
+      "note": "exact"
+    },
+    {
+      "variant": "deskew",
+      "image": "2021_Mi Security Camera 2 Box.jpg",
+      "python": [1570, 2522],
+      "swift": [1570, 2591],
+      "note": "Both trim the top flap; Swift's content block starts 69px higher. Residual skew after deskew is 2.00 deg (Swift) vs 4.05 deg (Python) - Swift straightens this case better. Visually equivalent crops."
+    },
+    {
+      "variant": "deskew",
+      "image": "2022_Bosch_Bluetooth_Speaker.jpg",
+      "python": [3578, 1029],
+      "swift": [3578, 1029],
+      "note": "exact. Residual skew 0.29 deg (Swift) vs 0.20 deg (Python)."
+    }
+  ]
+}

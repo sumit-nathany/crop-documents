@@ -1,8 +1,0 @@
-opencv-python
-pillow
-pillow-heif
-img2pdf
-watchdog
-pyyaml
-numpy
-pytesseract  # optional: for --rotate auto-rotation (also requires: brew install tesseract)
