@@ -14,6 +14,14 @@ if arguments.first == "probe-orientation" {
     ProbeCommand.run(paths: Array(arguments.dropFirst()))
     exit(0)
 }
+if arguments.first == "probe-skew" {
+    ProbeCommand.runSkew(paths: Array(arguments.dropFirst()))
+    exit(0)
+}
+if arguments.first == "probe-trim" {
+    ProbeCommand.runTrim(paths: Array(arguments.dropFirst()))
+    exit(0)
+}
 
 let options: Options
 do {

@@ -3,6 +3,26 @@ import Foundation
 
 /// Top/bottom flap trim — port of `processor.trim_external_content` (conservative sides).
 public enum DocumentTrimmer {
+    /// Longest side the row analysis runs at. Python analyses at full resolution; this caps
+    /// it because the edge/morphology loops are O(pixels) and a 12MP photo is slow.
+    ///
+    /// The cap is not free, though — several thresholds downstream are derived from the
+    /// analysis height (`kernel = h/150`, `gap = h/120`, `mergeGap = h/12`), so shrinking the
+    /// image shrinks the void the trimmer needs to see between a flap and the page. At 1200
+    /// the smoothing kernel drops to 9px and sparse edges bridge a real 658px gap, merging
+    /// flap and page into one block so nothing gets trimmed. Measured on the lab set, the
+    /// main block stabilises at Python's answer from 1600 upward:
+    ///
+    /// ```
+    ///   1200 → [ 79, 3049]   flap missed (1 merged run)
+    ///   1600 → [718, 3050]   flap found  (2 runs)
+    ///   2400 → [805, 3048]   flap found
+    ///   full → [807, 3048]   Python reference
+    /// ```
+    ///
+    /// 1600 is the smallest value that agrees, so it keeps the speed win (~2.5x fewer pixels
+    /// than full res on a phone photo) without the correctness loss.
+    static let analysisMaxSide = 1600
     public struct Side: OptionSet, Sendable {
         public let rawValue: Int
         public init(rawValue: Int) { self.rawValue = rawValue }
@@ -24,10 +44,9 @@ public enum DocumentTrimmer {
         edgeRowThreshold: Double = 0.008,
         edgeColThreshold: Double = 0.006
     ) -> CGImage {
-        let maxSide = 1200
         let w0 = cgImage.width
         let h0 = cgImage.height
-        let scale = min(1.0, CGFloat(maxSide) / CGFloat(max(w0, h0)))
+        let scale = min(1.0, CGFloat(analysisMaxSide) / CGFloat(max(w0, h0)))
 
         if scale >= 0.999 {
             return trimExternalContentFullRes(
@@ -70,6 +89,35 @@ public enum DocumentTrimmer {
         let left, top, right, bottom: Int
     }
 
+    /// Row-analysis intermediates, for diffing against `processor.trim_external_content`.
+    /// The trim has diverged from the Python reference twice now; being able to compare the
+    /// stages directly beats guessing at thresholds.
+    public struct TrimDiagnostics: Sendable {
+        public let analysisWidth: Int
+        public let analysisHeight: Int
+        public let smoothKernel: Int
+        public let contentRowCount: Int
+        public let firstContentRow: Int
+        public let lastContentRow: Int
+        public let gap: Int
+        public let mergeGap: Int
+        public let runCount: Int
+        public let mergedRuns: [[Int]]
+        public let minRun: Int
+        public let substantialRuns: [[Int]]
+        public let mainBlock: [Int]
+    }
+
+    /// Run the row analysis and report its intermediates without cropping anything.
+    /// Mirrors what `trimExternalContent` does internally, including the downscale.
+    public static func diagnose(
+        _ cgImage: CGImage,
+        edgeRowThreshold: Double = 0.008
+    ) -> TrimDiagnostics? {
+        let analysed = downscaledForAnalysis(cgImage) ?? cgImage
+        return rowAnalysis(analysed, edgeRowThreshold: edgeRowThreshold)?.diagnostics
+    }
+
     private static func trimExternalContentFullRes(
         _ cgImage: CGImage,
         marginPercent: Double,
@@ -101,6 +149,84 @@ public enum DocumentTrimmer {
         edgeRowThreshold: Double,
         edgeColThreshold: Double
     ) -> CropBounds? {
+        guard let analysis = rowAnalysis(cgImage, edgeRowThreshold: edgeRowThreshold) else {
+            return nil
+        }
+        let w = cgImage.width
+        let h = cgImage.height
+        let edges = analysis.edges
+        let yTop = analysis.diagnostics.mainBlock[0]
+        let yBot = analysis.diagnostics.mainBlock[1]
+
+        var xLeft = 0
+        var xRight = w - 1
+        var colFrac = [Double](repeating: 0, count: w)
+        for y in yTop...yBot {
+            for x in 0..<w {
+                colFrac[x] += Double(edges[y * w + x]) / 255.0
+            }
+        }
+        let bandRows = yBot - yTop + 1
+        for x in 0..<w { colFrac[x] /= Double(bandRows) }
+
+        let contentCols = colFrac.enumerated().compactMap { idx, v in
+            v >= edgeColThreshold ? idx : nil
+        }
+        if contentCols.count >= max(20, w / 50) {
+            xLeft = contentCols.first!
+            xRight = contentCols.last!
+        }
+
+        let padY = Int(Double(h) * (marginPercent / 100.0))
+        let padX = Int(Double(w) * (marginPercent / 100.0))
+        var cropTop = max(0, yTop - padY)
+        var cropBot = min(h - 1, yBot + padY)
+        var cropLeft = max(0, xLeft - padX)
+        var cropRight = min(w - 1, xRight + padX)
+
+        if !sides.contains(.top) { cropTop = 0 }
+        if !sides.contains(.bottom) { cropBot = h - 1 }
+        if !sides.contains(.left) { cropLeft = 0 }
+        if !sides.contains(.right) { cropRight = w - 1 }
+
+        var trimmedTop = cropTop
+        var trimmedBot = h - 1 - cropBot
+        var trimmedLeft = cropLeft
+        var trimmedRight = w - 1 - cropRight
+        let minTrim = Int(Double(h) * (minTrimPercent / 100.0))
+        let minTrimX = Int(Double(w) * (minTrimPercent / 100.0))
+        let maxTrimY = Int(Double(h) * maxTrimFraction)
+        let maxTrimX = Int(Double(w) * maxTrimFraction)
+
+        if trimmedTop < minTrim || trimmedTop > maxTrimY { cropTop = 0; trimmedTop = 0 }
+        if trimmedBot < minTrim || trimmedBot > maxTrimY { cropBot = h - 1; trimmedBot = 0 }
+        if trimmedLeft < minTrimX || trimmedLeft > maxTrimX { cropLeft = 0; trimmedLeft = 0 }
+        if trimmedRight < minTrimX || trimmedRight > maxTrimX { cropRight = w - 1; trimmedRight = 0 }
+
+        if cropTop == 0 && cropBot == h - 1 && cropLeft == 0 && cropRight == w - 1 {
+            return nil
+        }
+
+        let keepH = cropBot - cropTop + 1
+        let keepW = cropRight - cropLeft + 1
+        if keepH < Int(Double(h) * 0.45) || keepW < Int(Double(w) * 0.45) {
+            return nil
+        }
+
+        return CropBounds(left: cropLeft, top: cropTop, right: cropRight, bottom: cropBot)
+    }
+
+    private struct RowAnalysis {
+        let edges: [UInt8]
+        let diagnostics: TrimDiagnostics
+    }
+
+    /// Locate the main content block by row edge density — the first half of
+    /// `processor.trim_external_content`, shared by the crop path and `diagnose`.
+    private static func rowAnalysis(
+        _ cgImage: CGImage,
+        edgeRowThreshold: Double
+    ) -> RowAnalysis? {
         guard let rgb = rgbBytes(from: cgImage) else { return nil }
         let w = cgImage.width
         let h = cgImage.height
@@ -161,65 +287,37 @@ public enum DocumentTrimmer {
         }
 
         let main = substantial.max(by: { ($0[1] - $0[0]) < ($1[1] - $1[0]) })!
-        let yTop = main[0]
-        let yBot = main[1]
 
-        var xLeft = 0
-        var xRight = w - 1
-        var colFrac = [Double](repeating: 0, count: w)
-        for y in yTop...yBot {
-            for x in 0..<w {
-                colFrac[x] += Double(edges[y * w + x]) / 255.0
-            }
-        }
-        let bandRows = yBot - yTop + 1
-        for x in 0..<w { colFrac[x] /= Double(bandRows) }
+        return RowAnalysis(
+            edges: edges,
+            diagnostics: TrimDiagnostics(
+                analysisWidth: w,
+                analysisHeight: h,
+                smoothKernel: kernel,
+                contentRowCount: contentRows.count,
+                firstContentRow: contentRows.first ?? -1,
+                lastContentRow: contentRows.last ?? -1,
+                gap: gap,
+                mergeGap: mergeGap,
+                runCount: runs.count,
+                mergedRuns: merged,
+                minRun: minRun,
+                substantialRuns: substantial,
+                mainBlock: main
+            )
+        )
+    }
 
-        let contentCols = colFrac.enumerated().compactMap { idx, v in
-            v >= edgeColThreshold ? idx : nil
-        }
-        if contentCols.count >= max(20, w / 50) {
-            xLeft = contentCols.first!
-            xRight = contentCols.last!
-        }
-
-        let padY = Int(Double(h) * (marginPercent / 100.0))
-        let padX = Int(Double(w) * (marginPercent / 100.0))
-        var cropTop = max(0, yTop - padY)
-        var cropBot = min(h - 1, yBot + padY)
-        var cropLeft = max(0, xLeft - padX)
-        var cropRight = min(w - 1, xRight + padX)
-
-        if !sides.contains(.top) { cropTop = 0 }
-        if !sides.contains(.bottom) { cropBot = h - 1 }
-        if !sides.contains(.left) { cropLeft = 0 }
-        if !sides.contains(.right) { cropRight = w - 1 }
-
-        var trimmedTop = cropTop
-        var trimmedBot = h - 1 - cropBot
-        var trimmedLeft = cropLeft
-        var trimmedRight = w - 1 - cropRight
-        let minTrim = Int(Double(h) * (minTrimPercent / 100.0))
-        let minTrimX = Int(Double(w) * (minTrimPercent / 100.0))
-        let maxTrimY = Int(Double(h) * maxTrimFraction)
-        let maxTrimX = Int(Double(w) * maxTrimFraction)
-
-        if trimmedTop < minTrim || trimmedTop > maxTrimY { cropTop = 0; trimmedTop = 0 }
-        if trimmedBot < minTrim || trimmedBot > maxTrimY { cropBot = h - 1; trimmedBot = 0 }
-        if trimmedLeft < minTrimX || trimmedLeft > maxTrimX { cropLeft = 0; trimmedLeft = 0 }
-        if trimmedRight < minTrimX || trimmedRight > maxTrimX { cropRight = w - 1; trimmedRight = 0 }
-
-        if cropTop == 0 && cropBot == h - 1 && cropLeft == 0 && cropRight == w - 1 {
-            return nil
-        }
-
-        let keepH = cropBot - cropTop + 1
-        let keepW = cropRight - cropLeft + 1
-        if keepH < Int(Double(h) * 0.45) || keepW < Int(Double(w) * 0.45) {
-            return nil
-        }
-
-        return CropBounds(left: cropLeft, top: cropTop, right: cropRight, bottom: cropBot)
+    /// The downscale `trimExternalContent` applies before analysis, factored out so
+    /// `diagnose` measures exactly what the crop path measures.
+    private static func downscaledForAnalysis(_ cgImage: CGImage) -> CGImage? {
+        let scale = min(1.0, CGFloat(analysisMaxSide) / CGFloat(max(cgImage.width, cgImage.height)))
+        if scale >= 0.999 { return cgImage }
+        return resized(
+            cgImage,
+            width: max(1, Int(CGFloat(cgImage.width) * scale)),
+            height: max(1, Int(CGFloat(cgImage.height) * scale))
+        )
     }
 
     private static func cropCGImage(
@@ -282,17 +380,15 @@ public enum DocumentTrimmer {
         return gray
     }
 
-    /// Sobel-magnitude edge map with Canny-style hysteresis.
+    /// Stand-in for `cv2.Canny(blur, 50, 150)`: Sobel magnitude → non-maximum suppression →
+    /// hysteresis. All three stages matter here, and both have been got wrong once:
     ///
-    /// Stands in for `cv2.Canny(blur, 50, 150)`. It skips non-maximum suppression — the
-    /// trimmer only ever consumes row/column edge *densities*, so thicker edges wash out —
-    /// but the hysteresis matters and is implemented: pixels above `high` are edges, pixels
-    /// between `low` and `high` are edges only when connected to one.
-    ///
-    /// (Previously this compared `mag >= 50 && mag <= 150`, reading Canny's two thresholds
-    /// as a band. That discarded every *strong* edge — document borders and text, exactly
-    /// what the trimmer looks for — and made trim decisions diverge wildly from the Python
-    /// pipeline in both directions.)
+    /// - Dropping hysteresis for a `mag >= 50 && mag <= 150` band discarded every *strong*
+    ///   edge — document borders and text, exactly what the trimmer looks for.
+    /// - Dropping non-maximum suppression left edges several pixels thick. The trimmer only
+    ///   consumes row/column *densities*, so that looks harmless, but it inflated row counts
+    ///   by ~50% and let sparse texture bridge the void between a flap and the page, so the
+    ///   two merged into one block and nothing was trimmed.
     private static func cannyLite(
         gray: [UInt8],
         width w: Int,
@@ -302,7 +398,10 @@ public enum DocumentTrimmer {
     ) -> [UInt8] {
         let blurred = boxBlur3(gray, width: w, height: h)
 
+        // Sobel magnitude, plus the gradient direction quantised to the four neighbour
+        // orientations non-maximum suppression compares against.
         var magnitude = [Int](repeating: 0, count: w * h)
+        var direction = [UInt8](repeating: 0, count: w * h)
         for y in 1..<(h - 1) {
             for x in 1..<(w - 1) {
                 let gx = Int(blurred[(y - 1) * w + (x + 1)]) + 2 * Int(blurred[y * w + (x + 1)])
@@ -313,14 +412,52 @@ public enum DocumentTrimmer {
                     + Int(blurred[(y + 1) * w + (x + 1)])
                     - Int(blurred[(y - 1) * w + (x - 1)]) - 2 * Int(blurred[(y - 1) * w + x])
                     - Int(blurred[(y - 1) * w + (x + 1)])
-                magnitude[y * w + x] = Int(hypot(Double(gx), Double(gy)))
+                let index = y * w + x
+                magnitude[index] = Int(hypot(Double(gx), Double(gy)))
+
+                // Bin the angle into 0°/45°/90°/135° using |gy|/|gx| ratios, avoiding atan2
+                // per pixel. tan(22.5°) ≈ 0.4142, tan(67.5°) ≈ 2.4142.
+                let ax = Double(abs(gx))
+                let ay = Double(abs(gy))
+                if ay <= 0.4142 * ax {
+                    direction[index] = 0          // horizontal gradient → compare left/right
+                } else if ay >= 2.4142 * ax {
+                    direction[index] = 2          // vertical gradient → compare up/down
+                } else {
+                    direction[index] = (gx > 0) == (gy > 0) ? 1 : 3   // diagonals
+                }
             }
         }
 
-        // Strong pixels seed the output; weak pixels join via flood fill from a strong one.
+        // Non-maximum suppression: keep a pixel only if it is a local peak along the
+        // gradient. Without this every edge comes out several pixels thick, which inflates
+        // the row densities the trimmer measures and lets sparse texture bridge the void
+        // between a flap and the page.
+        var thinned = [Int](repeating: 0, count: w * h)
+        for y in 1..<(h - 1) {
+            for x in 1..<(w - 1) {
+                let index = y * w + x
+                let m = magnitude[index]
+                guard m > 0 else { continue }
+                let (dx, dy): (Int, Int)
+                switch direction[index] {
+                case 0: (dx, dy) = (1, 0)
+                case 1: (dx, dy) = (1, 1)
+                case 2: (dx, dy) = (0, 1)
+                default: (dx, dy) = (1, -1)
+                }
+                let before = magnitude[(y - dy) * w + (x - dx)]
+                let after = magnitude[(y + dy) * w + (x + dx)]
+                if m >= before && m >= after {
+                    thinned[index] = m
+                }
+            }
+        }
+
+        // Hysteresis: strong pixels seed the output, weak pixels join via connectivity.
         var edges = [UInt8](repeating: 0, count: w * h)
         var stack: [Int] = []
-        for i in 0..<(w * h) where magnitude[i] >= high {
+        for i in 0..<(w * h) where thinned[i] >= high {
             edges[i] = 255
             stack.append(i)
         }
@@ -334,7 +471,7 @@ public enum DocumentTrimmer {
                     let nx = x + dx
                     guard ny >= 1, ny < h - 1, nx >= 1, nx < w - 1 else { continue }
                     let n = ny * w + nx
-                    if edges[n] == 0 && magnitude[n] >= low {
+                    if edges[n] == 0 && thinned[n] >= low {
                         edges[n] = 255
                         stack.append(n)
                     }

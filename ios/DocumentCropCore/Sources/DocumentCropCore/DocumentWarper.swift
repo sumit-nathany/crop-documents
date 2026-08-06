@@ -113,11 +113,42 @@ public enum DocumentWarper {
         let backToCenter = CGAffineTransform(translationX: center.x, y: center.y)
         let transform = toOrigin.concatenating(rotate).concatenating(backToCenter)
 
-        let rotated = ci.transformed(by: transform).clampedToExtent()
+        // Fill the corner triangles rotation exposes by mirroring the image outward, matching
+        // OpenCV's BORDER_REFLECT (`processor.deskew_image`). `clampedToExtent()` would smear
+        // the edge pixel instead, which reads as a streak against the organic background and
+        // was the largest remaining pixel difference from the Python pipeline.
+        let source = reflectPadded(ci, extent: extent)
+        let rotated = source.transformed(by: transform)
         guard let cg = context.createCGImage(rotated, from: extent.integral) else {
             return cgImage
         }
         return cg
+    }
+
+    /// Mirror `image` across all four edges so sampling just outside `extent` reflects the
+    /// content back, the way `cv2.BORDER_REFLECT` does.
+    private static func reflectPadded(_ image: CIImage, extent: CGRect) -> CIImage {
+        // A rotation of a few degrees only ever reaches a little past the edge, so one
+        // mirrored copy per side (and per corner) is ample.
+        func mirrored(flipX: Bool, flipY: Bool, dx: CGFloat, dy: CGFloat) -> CIImage {
+            var t = CGAffineTransform(translationX: -extent.midX, y: -extent.midY)
+            t = t.concatenating(CGAffineTransform(scaleX: flipX ? -1 : 1, y: flipY ? -1 : 1))
+            t = t.concatenating(CGAffineTransform(translationX: extent.midX + dx, y: extent.midY + dy))
+            return image.transformed(by: t)
+        }
+
+        let w = extent.width
+        let h = extent.height
+        var composite = image
+        for (fx, fy, dx, dy) in [
+            (true, false, -w, 0), (true, false, w, 0),      // left / right
+            (false, true, 0, -h), (false, true, 0, h),      // below / above
+            (true, true, -w, -h), (true, true, w, -h),      // corners
+            (true, true, -w, h), (true, true, w, h),
+        ] as [(Bool, Bool, CGFloat, CGFloat)] {
+            composite = composite.composited(over: mirrored(flipX: fx, flipY: fy, dx: dx, dy: dy))
+        }
+        return composite
     }
 
     /// Faithful port of `processor._estimate_skew_angle` — title-band Hough line detection with a
