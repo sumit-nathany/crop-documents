@@ -25,7 +25,7 @@ The Mac CLI and the iPhone app share one engine — the `DocumentCropCore` Swift
 - 📦 **Zero runtime dependencies**: No Python, OpenCV, Tesseract, or `img2pdf`. Everything is Vision, CoreImage, and CoreGraphics.
 - 🍏 **Native HEIC/HEIF Support**: Directly handles photos taken with your iPhone, saving them as high-quality JPEGs.
 - 📂 **Auto Folder Watcher**: Background agent monitors a directory and auto-processes incoming pictures.
-- 📄 **Lossless PDF Generation**: Merges crops into custom PDFs, fitting each page exactly to the image's dimensions.
+- 📄 **PDF Generation**: Merges crops into a PDF, sizing each page exactly to its image — no white margins, no rescaling.
 
 ---
 
@@ -112,11 +112,12 @@ Fixes keystone, micro-rotation, and open flaps (top/bottom). Use this for handhe
 ./crop-documents --input ~/Downloads/Receipts/ --deskew --rotate
 ```
 
-> **Note:** Deskew fills empty corner triangles from rotation by mirroring the natural background padding.
+> **Note:** Deskew fills the empty corner triangles rotation exposes by mirroring the
+> natural background padding inward, so the organic border stays intact.
 >
-> **Status:** the Swift port of the flap trim is not yet at full parity with the
-> Python pipeline — it is more conservative and can leave a flap Python would trim.
-> See "Why the Python CLI is still here" below.
+> Deskew is verified on macOS against `lab/cases/`, but it is **off by default in the
+> iPhone app** and its toggle is hidden — the angle estimate has passed verification on
+> Mac twice without holding up on a real device. See `ios/HANDOFF.md`.
 
 ### 6. Auto-Rotation (`--rotate` / `-r`)
 When a page is photographed sideways, `--rotate` straightens it **after** cropping using Vision text recognition:
@@ -173,6 +174,10 @@ deskew / rotate / enhance all off.
 ```
 crop-documents/
 ├── build-cli.sh                        # Builds ./crop-documents (release)
+├── crop-documents                      # The built CLI (symlink, gitignored)
+├── README.md
+├── CLAUDE.md                           # Agent context (Claude Code)
+├── .cursor/rules/                      # Agent context (Cursor)
 ├── ios/
 │   ├── DocumentCropCore/               # THE ENGINE — shared by CLI and app
 │   │   ├── Sources/DocumentCropCore/   #   detect, warp, trim, orient, enhance, IO, PDF
@@ -180,10 +185,10 @@ crop-documents/
 │   │   └── Tests/                      #   swift test
 │   ├── Margin/                         # iPhone front end (SwiftUI)
 │   └── Margin.xcodeproj                # Generated — re-run xcodegen after adding files
-├── lab/                                # Regression cases + variant runner
-├── CLAUDE.md                           # Agent context (Claude Code)
-├── .cursor/rules/                      # Agent context (Cursor)
-└── README.md
+└── lab/
+    ├── cases/                          # Your hard photos (gitignored)
+    ├── run_regression.sh               # Crop/deskew/rotate variants
+    └── python-reference-baseline.json  # What the retired Python pipeline produced
 ```
 
 ### The Python pipeline this replaced

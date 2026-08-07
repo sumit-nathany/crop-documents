@@ -8,10 +8,10 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Crop") {
-                    // Straighten/deskew toggle hidden for now — the auto-rotate angle estimate
-                    // isn't reliable yet on real device photos (see ios/HANDOFF.md). Re-enable
-                    // once that's re-verified; CropSettings.straighten still exists and defaults
-                    // to false in the meantime.
+                    // Straighten/deskew toggle hidden for now — the deskew angle estimate hasn't
+                    // held up on real device photos, despite passing verification on Mac twice
+                    // (see ios/HANDOFF.md). Re-enable once there's an on-device verification
+                    // loop; CropSettings.straighten still exists and defaults to false meanwhile.
                     HStack {
                         Text("Border")
                         Spacer()

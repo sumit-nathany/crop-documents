@@ -47,6 +47,7 @@ Inside the engine:
 | `DocumentImageIO` | Load/save, EXIF bake, HEIC→JPEG naming |
 | `DocumentPDFBuilder` | Native CGContext multi-page PDF |
 | `DocumentCropper` | Orchestrates the above; `cropFile` is the file-level entry |
+| `CropLogger` | Shared ring buffer — the CLI's `--verbose` and the app's log view |
 
 Vision coords: normalized, origin bottom-left, order TL,TR,BR,BL. The engine converts
 to top-left pixel space at the boundary.
@@ -60,9 +61,10 @@ to top-left pixel space at the boundary.
   `swift build --package-path ios/DocumentCropCore` **and**
   `xcodebuild -project ios/Margin.xcodeproj -scheme Margin -destination 'generic/platform=iOS Simulator' build`.
 - **Detection thresholds are per-platform policy, not algorithm.** `DetectionPolicy.strict`
-  (iOS, 35% area floor) rejects sub-region latches on camera photos; `.lenient` (Mac)
-  matches Python's no-floor behaviour on curated files. Don't hardcode one platform's
-  tuning into shared code — that already broke a working Mac case once.
+  (iOS, 35% area floor) rejects sub-region latches on camera photos; `.lenient` (Mac, 10%)
+  suits curated files, where a document legitimately covering a third of a tall photo is
+  normal. Don't hardcode one platform's tuning into shared code — a 35% floor applied on
+  Mac silently skipped a lab photo that Vision had detected perfectly well.
 - **Build release for anything timed.** The pixel loops are ~10x slower under `-Onone`.
 
 ## Product / agent priorities
@@ -80,8 +82,9 @@ to top-left pixel space at the boundary.
   non-maximum suppression (edges too thick, inflating row density ~50% so flap and page
   merged into one block). `DocumentTrimmerTests` pins both. `DocumentTrimmer.analysisMaxSide`
   is likewise load-bearing — below 1600 the void between flap and page closes up.
-- **`straighten` is off by default and hidden in the iOS UI** — two rounds of
-  "verified" fixes did not hold up on real device photos. See `ios/HANDOFF.md`.
+- **`straighten` is off by default and hidden in the iOS UI.** Deskew is verified on Mac
+  against `lab/`, but two rounds of "verified" fixes have not held up on real device photos,
+  so re-enabling needs an on-device verification loop first. See `ios/HANDOFF.md`.
 - **`--rotate` fixes sideways pages only, never 180°.** Vision reads upside-down text
   nearly as well as upright text, so the 180° call is a coin toss. Measured, documented
   in `DocumentOrienter`. This is narrower than the Tesseract OSD it replaced.

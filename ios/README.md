@@ -16,14 +16,17 @@ Requires Xcode 16+, iOS 17+. Use a real iPhone for camera + saving to Photos.
 
 1. Choose photos or take one
 2. Auto-detect → expand border → warp → optional straighten + flap trim
-3. Optional CoreImage auto-enhance (`--enhance` on CLI)
-4. Save to Photos or share
+3. Optional quarter-turn correction, then optional CoreImage auto-enhance
+4. Tap a result to view it full-screen; save to Photos or share
 
 The app and the Mac CLI (`./crop-documents`) run the *same* engine — `DocumentCropCore` —
 so crop behaviour is identical by construction rather than by porting.
 
-Note: `straighten` is currently off and its Settings toggle is hidden, pending on-device
-re-verification of the deskew angle estimate. See `HANDOFF.md`.
+Note: `straighten` is off and its Settings toggle is hidden, pending on-device
+re-verification of the deskew angle estimate — it has passed verification on Mac twice
+without holding up on a real device. See `HANDOFF.md`.
+
+Settings exposes Border (expansion %) and Enhance.
 
 ## Layout
 
